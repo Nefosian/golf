@@ -3,3 +3,5 @@
 *.prof
 # drawn by tools/previews (the image build draws its own)
 /web/previews/
+# the server's own settings (compose.yaml: PORT, MAX_ROOMS, TRUST_PROXY)
+.env

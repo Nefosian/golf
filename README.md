@@ -44,12 +44,18 @@ docker run --read-only --cap-drop ALL --security-opt no-new-privileges -p 3000:3
   HTTP/1.1 en clair, le TLS est l'affaire du reverse proxy ;
 - le healthcheck est le binaire lui-même (`trou-normand healthcheck`), qui vérifie seulement
   que le port accepte une connexion. Le conteneur est déclaré sain en 1 s ;
-- la construction joue chaque trou (`tools/verify`, ~7 s) et s'arrête si un trou est refusé, puis
+- la construction joue chaque trou (`tools/verify`, ~65 s pour 75 trous sur 20 cœurs, davantage sur un petit serveur) et s'arrête si un trou est refusé, puis
   redessine tous les aperçus (`tools/previews`, ~1,5 s, avec le Chromium de Debian installé dans
   l'étape de construction) : rien n'est à vérifier ni à dessiner à la main avant ;
 - les caches de Go sont gardés entre deux constructions (BuildKit) : seul ce qui a changé est
   recompilé. Un changement du README ne reconstruit rien ;
 - il faut Docker 25 ou plus récent (`--start-interval`).
+
+**En production**, `compose.yaml` lance le jeu seul, sur le port 3000 du serveur (réglages
+facultatifs dans un fichier `.env` à côté : `PORT`, `MAX_ROOMS`, `TRUST_PROXY=1` seulement derrière un
+reverse proxy). Pour lancer comme pour mettre à jour : `git pull && docker compose up -d --build`. Si
+la construction échoue (un trou refusé), l'ancien conteneur continue de tourner. Le jeu ne parle que
+HTTP en clair : pour HTTPS, un reverse proxy devant (qui laisse passer les WebSockets de `/ws`).
 
 ## Ce qu'il y a dedans
 
