@@ -12,6 +12,7 @@ sont archivés à côté, dans `../trou-normand-prototype/` (`v2/` pour la versi
 
 ```sh
 go run .                       # http://localhost:3000 : le jeu
+DEV_MAPS=1 go run .            # pour construire les trous : chaque trou est relu dans maps/ quand une salle le lance
 docker build -t trou-normand . && docker run -p 3000:3000 trou-normand
 ```
 
@@ -372,7 +373,12 @@ comment. Un JSON de `maps/` n'est jamais écrit à la main : il sort de son scri
 
 - `tools/maps/holes/hNN-nom.mjs` décrit un trou avec les aides de `tools/maps/lib.mjs` (`floor`,
   `slab` une pente, `rail` des murs, `fence`, `block`, `post`, `water` un bassin, `pad`/`disc`
-  des zones, `tee`, `cup`) ;
+  des zones, `tee`, `cup`), et ses pièces arrondies : `path` (chemin à murs, lignes droites qui montent
+  ou descendent, virages plats), `plate` et `green` (plateaux `roundRect` ou `disc`, avec ouvertures),
+  `bowl` (cuvette). Le pool refait autour de ces pièces : `p01` à `p20` (voir
+  `docs/recherche-parcours.md` et `docs/parcours-v2.md`), à côté des 75 anciens pour l'instant ;
+- avec `DEV_MAPS=1 go run .`, un trou reconstruit est joué à la partie suivante, sans relancer le
+  serveur (un fichier ajouté ou retiré demande un redémarrage) ;
 - `node tools/maps/build.mjs hNN` écrit `maps/hNN-nom.json` (sans argument : tous) ;
 - `go run ./tools/mapcheck -file maps/hNN-nom.json -verify` dit ce que `tools/verify` pense de ce
   seul trou ; `-sweep` montre où finissent les tirs du départ (`-from x,y,z` : d'ailleurs), et
@@ -412,6 +418,12 @@ L'herbe est tondue en larges bandes dans l'axe du trou, un peu inégale, plus cl
 bouge : les obstacles mobiles. Une porte prend la couleur de sa clé (`KEY_COLOR` : bleu, puis vermillon ; à partir de la
 troisième, une clé partage sa couleur avec un autre élément : deux clés au plus par trou) et porte son cadenas. Quand une zone agit sur sa balle, le
 joueur la voit nommée dans un bandeau ; une clé ou un bonus pris disparaît.
+
+Le parcours n'est pas dessiné boîte par boîte (`floorMeshes`, `wallMeshes` dans `web/scene.js`) : les sols
+fixes sont fusionnés par carrés de 8 u, sans les faces cachées entre deux sols ; les murs simples sont
+suivis bout à bout et dessinés comme un seul mur (en onglet aux angles, lissé dans les courbes douces),
+avec un contour et une couronne continus, par morceaux de 4 u (un mur devant la caméra s'efface morceau
+par morceau). Mesuré sur La Passerelle (662 colliders) : 271 appels de dessin par image au lieu de 4 633.
 
 Une zone est déjà un volume, pas une surface : le vent agit sur la balle dans toute sa hauteur (`h`
 d'une boîte, `hh` d'un cylindre), en l'air comme au sol. Pour un vent qui souffle dans les airs, la

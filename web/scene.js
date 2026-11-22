@@ -341,25 +341,19 @@ const SIDE = {
   }),
   post: (base, band) => tile('post ' + base + band, (g, n) => { fill(g, n, base); g.fillStyle = band; g.fillRect(0, n * 0.3, n, n * 0.4); }),
 };
-// what crowns a plain wall (half-height 0.5 at most: borders and rails) or a post, in its own frame:
-// never more than 0.10 over it nor 0.03 out of its sides (balls fly over walls: the drawing must not lie)
+// what crowns a plain wall (half-height 0.5 at most: borders and rails) or a post: never more than 0.10
+// over it nor 0.03 out of its sides (balls fly over walls: the drawing must not lie). A wall's crown
+// runs along the whole wall (see wallMeshes): a rounded rod (rod: its height, r: its half-width for a
+// wall w wide, w / 2 by default), a slab (its height, 0.03 out of each side), or pieces every step.
 const crowns = new Map(); // key -> [geometry, its ink]
-const halfRod = (r, h, l) => new THREE.CylinderGeometry(r, r, l, 14, 1, false, 0, Math.PI).rotateZ(Math.PI / 2).rotateX(-Math.PI / 2).scale(1, h / r, 1); // along x, its flat side down
 const dome = (r, h) => new THREE.SphereGeometry(r, 18, 8, 0, TAU, 0, Math.PI / 2).scale(1, h / r, 1);
-// along a wall of length l: one piece every step from its middle, when it is long enough
-const along = (l, step, piece) => {
-  if (l < 1.2) return null;
-  const parts = [];
-  for (let k = -Math.floor((l / 2 - 0.3) / step); k * step <= l / 2 - 0.3; k++) parts.push(piece().translate(k * step, 0, 0));
-  return mergeGeometries(parts);
-};
 const CROWN = {
-  bocage: { wall: (l, w) => halfRod(w / 2, 0.1, l), post: r => dome(r, 0.1) },
-  ville: { wall: (l, w) => new THREE.BoxGeometry(l + 0.06, 0.06, w + 0.06).translate(0, 0.03, 0), post: r => dome(r, 0.08) },
-  quai: { wall: (l, w) => new THREE.BoxGeometry(l + 0.06, 0.05, w + 0.06).translate(0, 0.025, 0) },
-  chateau: { wall: (l, w) => along(l, 0.6, () => new THREE.BoxGeometry(0.3, 0.1, w).translate(0, 0.05, 0)), post: r => new THREE.ConeGeometry(r + 0.03, Math.min(0.4 * r, 0.1), 24).translate(0, Math.min(0.4 * r, 0.1) / 2, 0) },
-  banquise: { wall: (l, w) => halfRod(Math.min(0.11, w / 2 + 0.03), 0.08, Math.max(0.1, l - 0.08)), post: r => dome(r, 0.1) },
-  nuit: { wall: l => along(l, 0.6, () => dome(0.09, 0.09)), post: r => dome(r, 0.08), glow: true },
+  bocage: { rail: { rod: 0.1 }, post: r => dome(r, 0.1) },
+  ville: { rail: { slab: 0.06 }, post: r => dome(r, 0.08) },
+  quai: { rail: { slab: 0.05 } },
+  chateau: { rail: { piece: w => new THREE.BoxGeometry(0.3, 0.1, w).translate(0, 0.05, 0), step: 0.6 }, post: r => new THREE.ConeGeometry(r + 0.03, Math.min(0.4 * r, 0.1), 24).translate(0, Math.min(0.4 * r, 0.1) / 2, 0) },
+  banquise: { rail: { rod: 0.08, r: w => Math.min(0.11, w / 2 + 0.03) }, post: r => dome(r, 0.1) },
+  nuit: { rail: { piece: () => dome(0.09, 0.09), step: 0.6 }, post: r => dome(r, 0.08), glow: true },
 };
 const THEMES = {
   bocage: { sky: '#5cc4e8', horizon: '#fff2d6', below: '#8fd0e8', grass: '#7ddb6b', lip: '#49b65c', skirt: ['#49b65c', '#b07a4f', '#8a5a3c'], top: '#175f3d', side: () => SIDE.leaves('#124f33', '#175f3d', '#1f7a4c'), crownColor: '#175f3d', clouds: 1, mill: true, fence: true,
@@ -407,24 +401,12 @@ function dress(name) {
     wall: [side, side, top, top, side, side],
     post: [t.post ? themeToon(0xffffff, { map: t.post() }) : side, t.postTop ? themeToon(t.postTop) : top, top],
     recolor: m => swaps.get(m) ?? m, // a prop's colour in the decor: the theme's
-    // cap gives what crowns plain collider c, in its frame
+    rail: how?.rail ? { ...how.rail, material: crownMat, glow: !!how.glow } : null, // what crowns the plain walls (wallMeshes)
+    // cap gives what crowns plain post c, in its frame (a wall's crown runs along it: rail)
     cap(c) {
-      if (!how) return [];
-      let key, make, material = crownMat, y;
-      if (c.shape === BOX) {
-        if (c.h[1] > 0.5 || !how.wall) return [];
-        const alongX = c.h[0] >= c.h[2], l = 2 * (alongX ? c.h[0] : c.h[2]), w = 2 * (alongX ? c.h[2] : c.h[0]);
-        key = name + ' wall ' + l.toFixed(3) + ' ' + w.toFixed(3) + ' ' + alongX;
-        make = () => { const g = how.wall(l, w); return g && !alongX ? g.rotateY(Math.PI / 2) : g; };
-        y = c.h[1];
-      } else {
-        if (!how.post) return [];
-        key = name + ' post ' + c.r.toFixed(3);
-        make = () => how.post(c.r);
-        material = postCrownMat;
-        y = c.hh;
-      }
-      if (make && !crowns.has(key)) { const g = make(); if (!g) { crowns.set(key, null); return []; } crowns.set(key, [g, outlineAround(g)]); }
+      if (!how?.post || c.shape === BOX) return [];
+      const key = name + ' post ' + c.r.toFixed(3), make = () => how.post(c.r), material = postCrownMat, y = c.hh;
+      if (!crowns.has(key)) crowns.set(key, [make(), outlineAround(make())]);
       const got = crowns.get(key);
       if (!got) return [];
       const [geometry, ink] = got, mesh = new THREE.Mesh(geometry, material);
@@ -611,6 +593,7 @@ export class View {
     this.below.material = T.below;
     if (T.sea) this.scrolling.push({ texture: T.below.map, speed: 0.03 });
     grass.color.copy(T.grass); // one hole at a time: the grass is the theme's
+    const laid = [], walls = []; // the floors and the plain walls that stay put: merged (floorMeshes, wallMeshes)
     for (const c of hole.colliders) {
       if (c.hasCup) { // always a flat floor, see physics.Hole.Build
         const look = surface(c); // sand or ice under the cup too, not only grass
@@ -618,6 +601,10 @@ export class View {
         g.add(floor);
         this.floors.push(floor);
         continue;
+      }
+      if (c.shape === BOX && !c.motion && !c.key) {
+        if (c.kind === FLOOR) { laid.push(c); continue; }
+        if (c.kind === WALL && !surface(c)) { walls.push(c); continue; }
       }
       const plain = c.shape === BOX ? (c.kind === FLOOR ? MAT.floor : c.kind === WALL ? MAT.wall : MAT.post) : MAT.post;
       const look = surface(c) ?? plain;
@@ -645,6 +632,8 @@ export class View {
       if (c.kind === FLOOR) this.floors.push(mesh);
       g.add(mesh);
     }
+    for (const m of floorMeshes(laid, T.lip)) { g.add(m); this.floors.push(m); }
+    for (const m of wallMeshes(walls, hole.colliders, T)) g.add(m);
     (hole.zones ?? []).forEach(z => g.add(this.zone(z)));
     const box = new THREE.Box3().setFromObject(g);
     box.getCenter(this.center);
@@ -1322,6 +1311,254 @@ export class View {
     }
     this.renderer.render(this.scene, this.camera);
   }
+}
+
+// ---------------------------------------------------------------------------- the course, merged
+// Drawn one mesh per collider, a course made of pieces (tools/maps/lib.mjs: hundreds of facets) cost
+// thousands of draw calls a frame, and its curved walls showed every facet. So the floors that stay
+// put are merged, a few meshes per square of the course, without the sides that lie inside other
+// floors (their seams showed as lines); and the plain walls are followed from end to end and drawn as
+// one wall, mitred where two meet, shaded smooth through a gentle turn, with one outline and one crown.
+const REGION = 8;  // floors are merged by squares this wide: a see-through floor fades with its square
+const CHUNK = 4;   // a wall is drawn in pieces about this long: it fades piece by piece
+const SMOOTH = Math.cos(30 * Math.PI / 180); // two walls meeting at a gentler turn than this are shaded as one
+const SINK = 0.004; // the top of a wall's outline, under its top (a wall that joins it would show it as a line)
+const boxMatrix = c => new THREE.Matrix4().compose(new THREE.Vector3(...c.c), new THREE.Quaternion().setFromEuler(new THREE.Euler(...(c.rot ?? [0, 0, 0]))), new THREE.Vector3(1, 1, 1));
+// inside gives a test of whether a point is inside collider c (a box or a post)
+const inside = c => {
+  const inv = boxMatrix(c).invert(), q = new THREE.Vector3();
+  return p => {
+    q.copy(p).applyMatrix4(inv);
+    return c.shape === BOX ? Math.abs(q.x) < c.h[0] + 1e-4 && Math.abs(q.y) < c.h[1] + 1e-4 && Math.abs(q.z) < c.h[2] + 1e-4 : Math.hypot(q.x, q.z) < c.r && Math.abs(q.y) < c.hh;
+  };
+};
+// Soup gathers triangles by material, each with its corners' normals and texture coordinates, and
+// makes them one geometry, a group per material. A triangle faces the way its normals say.
+class Soup {
+  parts = new Map();
+  tri(material, ps, ns, uvs) {
+    if (!this.parts.has(material)) this.parts.set(material, { p: [], n: [], uv: [] });
+    const t = this.parts.get(material), face = ps[1].clone().sub(ps[0]).cross(ps[2].clone().sub(ps[0]));
+    const order = face.dot(ns[0].clone().add(ns[1]).add(ns[2])) < 0 ? [0, 2, 1] : [0, 1, 2];
+    for (const i of order) { t.p.push(ps[i].x, ps[i].y, ps[i].z); t.n.push(ns[i].x, ns[i].y, ns[i].z); t.uv.push(uvs[i][0], uvs[i][1]); }
+  }
+  quad(material, ps, ns, uvs) {
+    this.tri(material, [ps[0], ps[1], ps[2]], [ns[0], ns[1], ns[2]], [uvs[0], uvs[1], uvs[2]]);
+    this.tri(material, [ps[0], ps[2], ps[3]], [ns[0], ns[2], ns[3]], [uvs[0], uvs[2], uvs[3]]);
+  }
+  get empty() { return this.parts.size === 0; }
+  mesh(single) { // single: one material for all (an outline)
+    const g = new THREE.BufferGeometry(), materials = [];
+    let count = 0;
+    for (const t of this.parts.values()) count += t.p.length / 3;
+    const p = new Float32Array(count * 3), n = new Float32Array(count * 3), uv = new Float32Array(count * 2);
+    let at = 0;
+    for (const [m, t] of this.parts) {
+      p.set(t.p, at * 3); n.set(t.n, at * 3); uv.set(t.uv, at * 2);
+      if (!single) g.addGroup(at, t.p.length / 3, materials.length);
+      materials.push(m);
+      at += t.p.length / 3;
+    }
+    g.setAttribute('position', new THREE.BufferAttribute(p, 3));
+    g.setAttribute('normal', new THREE.BufferAttribute(n, 3));
+    g.setAttribute('uv', new THREE.BufferAttribute(uv, 2));
+    return new THREE.Mesh(g, single ?? materials);
+  }
+}
+// course units on the two axes a face lies along (as patternUV), from its point q and normal n
+const faceUV = (q, n) => Math.abs(n.y) > 0.5 ? [q.x / TILE, -q.z / TILE] : Math.abs(n.x) > 0.5 ? [-q.z / TILE, q.y / TILE] : [q.x / TILE, q.y / TILE];
+
+// floorMeshes draws the floor boxes that stay put: their tops in their look, their sides in lip, but a
+// side that lies inside other floors (two floors laid edge to edge, a fan of facets)
+function floorMeshes(floors, lip) {
+  const items = floors.map(c => ({ c, m: boxMatrix(c), inside: inside(c), at: new THREE.Vector3(...c.c), r: Math.hypot(...c.h) }));
+  const regions = new Map(), q = new THREE.Vector3();
+  for (const it of items) {
+    const { c, m } = it, near = items.filter(o => o !== it && o.at.distanceTo(it.at) < o.r + it.r + 0.05);
+    const key = Math.floor(c.c[0] / REGION) + ' ' + Math.floor(c.c[2] / REGION);
+    if (!regions.has(key)) regions.set(key, new Soup());
+    const soup = regions.get(key), top = surface(c) ?? MAT.floor, e = m.elements;
+    for (const axis of [0, 1, 2]) for (const s of [1, -1]) {
+      const [a1, a2] = [0, 1, 2].filter(k => k !== axis), point = (u, w, out = 0, y) => {
+        const p = [0, 0, 0];
+        p[axis] = s * (c.h[axis] + out); p[a1] = u * c.h[a1]; p[a2] = w * c.h[a2];
+        if (y !== undefined) p[1] = y;
+        return new THREE.Vector3(...p).applyMatrix4(m);
+      };
+      if (axis !== 1) { // a side: left out where, just outside it, its upper half is inside other floors
+        const flatAxis = a1 === 1 ? a2 : a1;
+        const hidden = [-0.9, -0.5, 0, 0.5, 0.9].every(f => {
+          const p = [0, 0, 0];
+          p[axis] = s * (c.h[axis] + 0.02); p[flatAxis] = f * c.h[flatAxis]; p[1] = 0.5 * c.h[1];
+          q.set(...p).applyMatrix4(m);
+          return near.some(o => o.inside(q));
+        });
+        if (hidden) continue;
+      }
+      const n = new THREE.Vector3(e[axis * 4], e[axis * 4 + 1], e[axis * 4 + 2]).multiplyScalar(s);
+      const ps = [point(-1, -1), point(1, -1), point(1, 1), point(-1, 1)];
+      // sand or ice laid on grass (sand on ice): a hair over it, or the two flicker
+      if (axis === 1 && s === 1 && top !== MAT.floor) for (const p of ps) p.y += c.material === 'sand' ? 0.006 : 0.003;
+      soup.quad(axis === 1 && s === 1 ? top : lip, ps, [n, n, n, n], ps.map(p => faceUV(p, n)));
+    }
+  }
+  return [...regions.values()].map(s => s.mesh());
+}
+
+// wallMeshes draws the plain walls that stay put (a box each): each end of a wall goes on with the wall
+// whose end is closest to it, if they are the same size, near enough and turn by less than 100°, the
+// two choosing each other. A run of walls so joined (or a ring of them) is one wall, cut into pieces
+// about CHUNK long, each with its outline and its crown (theme T).
+function wallMeshes(walls, colliders, T) {
+  const segs = walls.map(c => {
+    // a turned wall runs along its x (tools/maps/lib.mjs: rail, path, plate), even a facet shorter than
+    // thick; an unturned one (block) along its longer side
+    const e = boxMatrix(c).elements, alongX = c.rot?.some(v => v !== 0) || c.h[0] >= c.h[2];
+    const dir = alongX ? new THREE.Vector3(e[0], e[1], e[2]) : new THREE.Vector3(e[8], e[9], e[10]);
+    return { c, mid: new THREE.Vector3(...c.c), dir, up: new THREE.Vector3(e[4], e[5], e[6]), L: alongX ? c.h[0] : c.h[2], W: alongX ? c.h[2] : c.h[0], H: c.h[1], best: [], link: [] };
+  });
+  const tip = (s, k) => s.mid.clone().addScaledVector(s.dir, k * s.L); // k: 1 one end, -1 the other
+  const end = k => (k > 0 ? 1 : 0);
+  for (const s of segs) for (const k of [-1, 1]) {
+    let found = null, bestD = Infinity;
+    for (const o of segs) {
+      if (o === s || Math.abs(o.H - s.H) > 0.01 || Math.abs(o.W - s.W) > 0.01 || o.up.dot(s.up) < 0.9) continue;
+      for (const kk of [-1, 1]) {
+        const d = tip(s, k).distanceTo(tip(o, kk));
+        if (d < 2 * s.W + 0.05 && d < bestD && s.dir.dot(o.dir) * -k * kk > -0.17) { bestD = d; found = [o, kk]; }
+      }
+    }
+    s.best[end(k)] = found;
+  }
+  for (const s of segs) for (const k of [-1, 1]) {
+    const b = s.best[end(k)];
+    if (b && b[0].best[end(b[1])]?.[0] === s && b[0].best[end(b[1])][1] === k) s.link[end(k)] = b;
+  }
+  // the runs: from a free end, then the rings
+  const chains = [], seen = new Set();
+  const walk = (s, flip) => {
+    const chain = [];
+    for (let at = [s, flip]; at && !seen.has(at[0]);) {
+      const [w, f] = at, d = w.dir.clone().multiplyScalar(f ? -1 : 1);
+      seen.add(w);
+      chain.push({ w, d, a: tip(w, f ? 1 : -1), b: tip(w, f ? -1 : 1), right: d.clone().cross(w.up).normalize() });
+      const next = w.link[end(f ? -1 : 1)];
+      at = next && [next[0], next[1] > 0]; // entered at its end +1: it is walked backwards
+    }
+    return chain;
+  };
+  for (const s of segs) if (!seen.has(s) && (!s.link[0] || !s.link[1])) chains.push({ chain: walk(s, !s.link[1] && !!s.link[0]), closed: false });
+  for (const s of segs) if (!seen.has(s)) chains.push({ chain: walk(s, false), closed: true });
+
+  const blockers = colliders.filter(o => o.kind !== FLOOR && !o.motion).map(o => ({ o, inside: inside(o) }));
+  const meshes = [];
+  for (const { chain, closed } of chains) {
+    const n = chain.length, { W, H } = chain[0].w;
+    const off = (el, [sx, ty]) => el.right.clone().multiplyScalar(sx).addScaledVector(el.w.up, ty);
+    // the ring of a profile (points [across, up] from the middle line) where element k starts
+    const joint = (A, B, q) => { // where the line of q along A meets the line of q along B
+      const pA = A.b.clone().add(off(A, q)), pB = B.a.clone().add(off(B, q)), w0 = pA.clone().sub(pB);
+      const a = A.d.dot(A.d), b = A.d.dot(B.d), c = B.d.dot(B.d), d = A.d.dot(w0), e = B.d.dot(w0), den = a * c - b * b;
+      if (den > 1e-6) {
+        const t = (b * e - c * d) / den, u = (a * e - b * d) / den;
+        const p = pA.clone().addScaledVector(A.d, t).add(pB.clone().addScaledVector(B.d, u)).multiplyScalar(0.5);
+        if (p.distanceTo(pA) < 1) return p;
+      }
+      return pA.add(pB).multiplyScalar(0.5);
+    };
+    const rings = (profile, ext = [0, 0]) => Array.from({ length: n + 1 }, (_, k) => {
+      if (closed || (k > 0 && k < n)) return profile.map(q => joint(chain[(k - 1 + n) % n], chain[k % n], q));
+      const el = k === 0 ? chain[0] : chain[n - 1];
+      return profile.map(q => (k === 0 ? el.a : el.b).clone().add(off(el, q)).addScaledVector(el.d, k === 0 ? -ext[0] : ext[1]));
+    });
+    const arc = [0];
+    for (const el of chain) arc.push(arc.at(-1) + el.a.distanceTo(el.b));
+    const smoothAt = k => (closed || (k > 0 && k < n)) && chain[(k - 1 + n) % n].d.dot(chain[k % n].d) > SMOOTH;
+    // sweep puts the faces of elements k0 to k1 of a profile's rings in soup: its edges (smooth: the
+    // points of the profile it is shaded round), its ends where the run ends
+    const sweep = (soup, R, profile, smooth, k0, k1, material) => {
+      const P = profile.length, mid = profile.reduce((s, q) => [s[0] + q[0] / P, s[1] + q[1] / P], [0, 0]);
+      const F = (k, e) => { // the normal of face (k, e), outwards
+        k = (k + n) % n; e = (e + P) % P;
+        const a = R[k][e], b = R[k][(e + 1) % P], c = R[k + 1][e];
+        const f = c.clone().sub(a).cross(b.clone().sub(a)).normalize();
+        const out = off(chain[k], [(profile[e][0] + profile[(e + 1) % P][0]) / 2 - mid[0], (profile[e][1] + profile[(e + 1) % P][1]) / 2 - mid[1]]);
+        return f.dot(out) < 0 ? f.negate() : f;
+      };
+      for (let k = k0; k < k1; k++) for (let e = 0; e < P; e++) {
+        const f = F(k, e), corners = [[k, e], [k, e + 1], [k + 1, e + 1], [k + 1, e]];
+        const ns = corners.map(([r, p]) => {
+          const sum = f.clone(), ks = [k], es = [e];
+          if (smoothAt(r)) ks.push(r === k ? k - 1 : k + 1);
+          if (smooth[p % P]) es.push(p === e ? e - 1 : e + 1);
+          for (const kk of ks) for (const ee of es) if (kk !== k || ee !== e) if (closed || (kk >= 0 && kk < n)) sum.add(F(kk, ee));
+          return sum.normalize();
+        });
+        const ps = corners.map(([r, p]) => R[r][p % P]);
+        const uv = corners.map(([r, p], i) => [arc[r] / TILE, Math.abs(f.y) > 0.5 ? profile[p % P][0] / TILE : ps[i].y / TILE]);
+        soup.quad(material(f), ps, ns, uv);
+      }
+      if (!closed) for (const [k, sign] of [[0, -1], [n, 1]]) {
+        if ((k === 0 && k0 !== 0) || (k === n && k1 !== n)) continue;
+        const nn = chain[k === 0 ? 0 : n - 1].d.clone().multiplyScalar(sign);
+        for (let i = 1; i + 1 < P; i++) soup.tri(material(nn), [R[k][0], R[k][i], R[k][i + 1]], [nn, nn, nn], [[0, 0], [0, 0], [0, 0]]);
+      }
+    };
+    // the outline stands out of a free end, not out of an end against another wall or a post
+    const blocked = k => {
+      const el = k === 0 ? chain[0] : chain[n - 1], p = (k === 0 ? el.a : el.b).clone().addScaledVector(el.d, k === 0 ? -0.02 : 0.02).addScaledVector(el.w.up, H * 0.5);
+      return blockers.some(({ o, inside }) => !chain.some(x => x.w.c === o) && inside(p));
+    };
+    const wall = [[-W, -H], [W, -H], [W, H], [-W, H]];
+    const ink = [[-W - HULL, -H - HULL], [W + HULL, -H - HULL], [W + HULL, H - SINK], [-W - HULL, H - SINK]];
+    const R = rings(wall), Rink = rings(ink, closed ? [0, 0] : [blocked(0) ? 0 : HULL, blocked(n) ? 0 : HULL]);
+    const rail = H <= 0.5 ? T.rail : null;
+    let crown = null;
+    if (rail?.rod !== undefined) {
+      const rx = rail.r ? rail.r(2 * W) : W, arcAt = (r, h, i) => [r * Math.cos(Math.PI * i / 8), H + h * Math.sin(Math.PI * i / 8)];
+      const profile = Array.from({ length: 9 }, (_, i) => arcAt(rx, rail.rod, i)), inkProfile = Array.from({ length: 9 }, (_, i) => arcAt(rx + HULL * 0.7, rail.rod + HULL * 0.7, i));
+      const smooth = profile.map((_, i) => i > 0 && i < 8);
+      crown = { R: rings(profile), Rink: rings(inkProfile), profile, inkProfile, smooth };
+    } else if (rail?.slab !== undefined) {
+      const o = W + 0.03, profile = [[-o, H], [o, H], [o, H + rail.slab], [-o, H + rail.slab]], d = HULL * 0.7;
+      const inkProfile = [[-o - d, H - d], [o + d, H - d], [o + d, H + rail.slab + d], [-o - d, H + rail.slab + d]];
+      crown = { R: rings(profile), Rink: rings(inkProfile), profile, inkProfile, smooth: [false, false, false, false] };
+    }
+    const plain = [false, false, false, false], side = T.wall[0], top = T.wall[2];
+    for (let k0 = 0; k0 < n;) {
+      let k1 = k0 + 1;
+      while (k1 < n && arc[k1 + 1] - arc[k0] <= CHUNK) k1++;
+      const body = new Soup(), outline = new Soup();
+      sweep(body, R, wall, plain, k0, k1, f => (f.y > 0.5 ? top : side));
+      sweep(outline, Rink, ink, plain, k0, k1, () => HULL_MAT);
+      const mesh = body.mesh(), inkMesh = outline.mesh(HULL_MAT);
+      inkMesh.name = 'ink';
+      mesh.add(inkMesh);
+      if (crown) {
+        const s = new Soup(), si = new Soup();
+        sweep(s, crown.R, crown.profile, crown.smooth, k0, k1, () => rail.material);
+        const cm = s.mesh(rail.material);
+        if (!rail.glow) { sweep(si, crown.Rink, crown.inkProfile, crown.smooth, k0, k1, () => HULL_MAT); const ci = si.mesh(HULL_MAT); ci.name = 'ink'; cm.add(ci); }
+        mesh.add(cm);
+      } else if (rail?.piece) { // pieces every step along the run, from half a step
+        const parts = [];
+        for (let u = rail.step / 2 + Math.ceil((arc[k0] - rail.step / 2) / rail.step) * rail.step; u < arc[k1]; u += rail.step) {
+          let k = k0;
+          while (k + 1 < k1 && arc[k + 1] <= u) k++;
+          const el = chain[k], at = el.a.clone().addScaledVector(el.d, u - arc[k]).addScaledVector(el.w.up, H);
+          parts.push(rail.piece(2 * W).applyMatrix4(new THREE.Matrix4().makeBasis(el.d, el.w.up, el.right).setPosition(at)));
+        }
+        if (parts.length) {
+          const cm = new THREE.Mesh(mergeGeometries(parts), rail.material);
+          if (!rail.glow) cm.add(Object.assign(outlineAround(cm.geometry), { name: 'ink' }));
+          mesh.add(cm);
+        }
+      }
+      meshes.push(mesh);
+      k0 = k1;
+    }
+  }
+  return meshes;
 }
 
 // outline is the ink around a wall or a post: a box (a cylinder) a little bigger, seen from inside.

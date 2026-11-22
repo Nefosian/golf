@@ -7,7 +7,8 @@
 //	go run ./tools/mapcheck -file maps/h09-tir-groupe.json -from 0,0,-16 -sweep
 //	go run ./tools/mapcheck -file maps/h08-le-carrefour.json -shot 210,0.8
 //
-// -sweep shoots 360 angles (-angles) × powers 0.1 to 1 by 0.05 from the spot, on frame 0 (-frame).
+// -sweep shoots 360 angles (-angles, from -a0 to -a1 degrees) × powers 0.1 to 1 by 0.05 from the spot, on
+// frame 0 (-frame), and counts the floor bounces: a ramp or a turn that is not smooth makes the ball hop.
 // An angle is in degrees, the shot going towards (sin a, cos a): 180 is straight ahead (-Z).
 package main
 
@@ -30,6 +31,8 @@ func main() {
 	sweep := flag.Bool("sweep", false, "sweep angles and powers")
 	from := flag.String("from", "", "x,y,z of the floor to shoot from instead of the tee")
 	angles := flag.Int("angles", 360, "angles in the sweep")
+	a0 := flag.Float64("a0", 0, "first angle of the sweep, degrees")
+	a1 := flag.Float64("a1", 360, "end of the sweep's angles, degrees (excluded)")
 	frame := flag.Int("frame", 0, "the frame of the hole's clock the shots start on (moving colliders)")
 	one := flag.String("shot", "", "degrees,power: trace one shot")
 	flag.Parse()
@@ -78,12 +81,18 @@ func main() {
 		fmt.Sscanf(*from, "%g,%g,%g", &start.X, &start.Y, &start.Z)
 		start.Y += physics.BallR
 	}
+	bounces := 0 // floor bounces after the first half second: a ramp or a turn that is not smooth (or a landing)
 	play := func(w *physics.World, a, p float64, trace bool) physics.Ball {
 		b := physics.NewBall(start)
 		w.Settle(&b, *frame)
 		b.Shoot(math.Sin(a), math.Cos(a), p)
 		for k := *frame + 1; k < *frame+1800 && !b.Rest && !b.Holed && !b.Out && b.P.Y > h.KillY; k++ {
 			w.Advance(&b, k)
+			for _, e := range w.Events {
+				if e.Kind == physics.HitFloor && k > *frame+30 {
+					bounces++
+				}
+			}
 			if trace {
 				for _, e := range w.Events {
 					if e.Kind == physics.Entered || e.Kind == physics.Teleported {
@@ -112,7 +121,7 @@ func main() {
 	rest := map[[2]int]int{}
 	var aces []string
 	for i := 0; i < *angles; i++ {
-		a := 2 * math.Pi * float64(i) / float64(*angles)
+		a := (*a0 + (*a1-*a0)*float64(i)/float64(*angles)) * math.Pi / 180
 		for p := 0.1; p <= 1.0001; p += 0.05 {
 			b := play(w, a, p, false)
 			total++
@@ -129,7 +138,7 @@ func main() {
 			}
 		}
 	}
-	fmt.Printf("sweep from (%.2f, %.2f, %.2f): %d shots, %.1f%% holed, %.1f%% out\n", start.X, start.Y, start.Z, total, 100*float64(holed)/float64(total), 100*float64(out)/float64(total))
+	fmt.Printf("sweep from (%.2f, %.2f, %.2f): %d shots, %.1f%% holed, %.1f%% out, %.2f floor bounces per shot after the first half second\n", start.X, start.Y, start.Z, total, 100*float64(holed)/float64(total), 100*float64(out)/float64(total), float64(bounces)/float64(total))
 	if len(aces) > 0 {
 		fmt.Println("holed, e.g.:", strings.Join(aces, " | "))
 	}

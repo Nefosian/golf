@@ -13,6 +13,12 @@ import (
 //go:embed *.json
 var files embed.FS
 
+// Files are the names of the map files, in the order of Holes.
+func Files() []string {
+	names, _ := fs.Glob(files, "*.json")
+	return names
+}
+
 // Holes are the holes of the game: the maps in file name order.
 func Holes() ([]*physics.Hole, error) {
 	var holes []*physics.Hole

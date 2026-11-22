@@ -9,6 +9,7 @@ package game
 
 import (
 	"cmp"
+	"log"
 	"net"
 	"net/http"
 	"runtime"
@@ -28,6 +29,9 @@ type Config struct {
 	MaxRooms   int
 	TrustProxy bool     // read the client IP from X-Forwarded-For (one reverse proxy in front)
 	Previews   []string // the address of each hole's picture, "" for none (drawn by tools/previews)
+	// Reload, for development only, reads hole i again each time a room starts it (DEV_MAPS=1 in
+	// main.go): a map rebuilt by tools/maps is played without restarting the server.
+	Reload func(i int) (*physics.Hole, error)
 }
 
 const (
@@ -84,6 +88,19 @@ type Hub struct {
 	sessions map[string]*Session
 	failed   map[string]*failures
 	nextID   uint32
+}
+
+// hole is hole idx as a room starts it, and its JSON: the one read at start, or the file as it
+// is now when Config.Reload is set (the one read at start if the file is broken).
+func (h *Hub) hole(idx int) (*physics.Hole, []byte) {
+	if h.cfg.Reload != nil {
+		hole, err := h.cfg.Reload(idx)
+		if err == nil {
+			return hole, HoleJSON(hole)
+		}
+		log.Printf("reload hole %d: %v (playing the one read at start)", idx, err)
+	}
+	return h.holes[idx], h.holeJSON[idx]
 }
 
 // NewHub starts a hub playing the given holes (built, at least one).

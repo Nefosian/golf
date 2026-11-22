@@ -12,11 +12,13 @@ import (
 	"net/http"
 	"os"
 	"os/signal"
+	"path/filepath"
 	"strconv"
 	"syscall"
 	"time"
 
 	"trounormand/internal/game"
+	"trounormand/internal/physics"
 	"trounormand/maps"
 )
 
@@ -69,11 +71,26 @@ func main() {
 	if missing > 0 {
 		log.Printf("%d holes have no picture: run go run ./tools/previews", missing)
 	}
-	hub := game.NewHub(game.Config{
+	cfg := game.Config{
 		MaxRooms:   envInt("MAX_ROOMS", 200),
 		TrustProxy: os.Getenv("TRUST_PROXY") == "1",
 		Previews:   previews,
-	}, holes)
+	}
+	// DEV_MAPS=1 (development, run from the repository): each hole is read from maps/ again when a
+	// room starts it, so a hole rebuilt by node tools/maps/build.mjs is played at once. Files added
+	// or removed still need a restart.
+	if os.Getenv("DEV_MAPS") == "1" {
+		names := maps.Files()
+		cfg.Reload = func(i int) (*physics.Hole, error) {
+			data, err := os.ReadFile(filepath.Join("maps", names[i]))
+			if err != nil {
+				return nil, err
+			}
+			return physics.ParseHole(data)
+		}
+		log.Printf("DEV_MAPS: holes are read from maps/ each time they start")
+	}
+	hub := game.NewHub(cfg, holes)
 
 	mux := http.NewServeMux()
 	mux.HandleFunc("GET /healthz", func(w http.ResponseWriter, _ *http.Request) { w.Write([]byte("ok")) })

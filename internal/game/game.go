@@ -34,16 +34,20 @@ func (r *Room) limit(pos int) int {
 // have not finished count their stroke limit.
 func (r *Room) startHole(pos int, t float64) {
 	idx := r.course[pos]
-	hole := r.hub.holes[idx]
+	hole, holeJSON := r.hub.hole(idx)
 	r.pos, r.endsAt, r.limitAt = pos, 0, r.play.Limit*60*physics.FPS
 	r.holeSeq++
 	r.quit = map[uint32]bool{}
-	r.sim = newSim(hole, r.holeSeq, r.broadcast, r.limit(pos), hole.Solo || !r.play.Collisions)
+	limit := hole.StrokeLimit()
+	if r.play.Strokes > 0 {
+		limit = r.play.Strokes
+	}
+	r.sim = newSim(hole, r.holeSeq, r.broadcast, limit, hole.Solo || !r.play.Collisions)
 	r.startAt = t
 	for _, m := range r.members {
 		r.tee(m)
 	}
-	r.holeMsg = textFrame(fmt.Appendf(nil, `{"t":"hole","seq":%d,"hole":%s}`, r.holeSeq, r.hub.holeJSON[idx]))
+	r.holeMsg = textFrame(fmt.Appendf(nil, `{"t":"hole","seq":%d,"hole":%s}`, r.holeSeq, holeJSON))
 	r.broadcast(r.holeMsg)
 	r.sim.tell(0, true)
 	r.push()
