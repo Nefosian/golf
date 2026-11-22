@@ -237,6 +237,71 @@ function pieces(t) {
       if (cup) t.cup(cx, y, cz);
       return t;
     },
+    // geyser is a round jump pad on the floor at y: a ball that touches it leaps (speed: up). Tall, so
+    // that a ball falling back on it does not enter it again
+    geyser(x, z, y = 0, { r = 0.5, speed = 7 } = {}) {
+      h.zones.push({ type: 'jumppad', shape: 1, c: V(x, y + 1, z), r, hh: 1, params: { speed } });
+      return t;
+    },
+    // cannon fires a ball that rolls onto it (a pad of radius r on the floor at y, at x, z) so that it
+    // comes down on the floor at 'at' ([x, y, z]) T seconds later
+    cannon(x, z, y, at, { T = 1.6, r = 0.6 } = {}) {
+      const g = h.gravity ?? 18, v = [(at[0] - x) / T, (at[1] - y + 0.5 * g * T * T) / T, (at[2] - z) / T];
+      if (Math.hypot(...v) > 24) throw new Error(`cannon: ${Math.hypot(...v).toFixed(1)} u/s is too fast: give it a shorter flight`);
+      return t.disc('launcher', x, z, r, y, { v: V(...v) });
+    },
+    // slider is a block (x0, z0)-(x1, z1), from the floor at y up height, that slides by move ([dx, dz])
+    // and back, every period seconds
+    slider(x0, z0, x1, z1, y, height, move, { period = 3, phase = 0 } = {}) {
+      return t.raw({ shape: 0, kind: 1, c: V((x0 + x1) / 2, y + (height - WALL_SINK) / 2, (z0 + z1) / 2), rot: [0, 0, 0],
+        h: V(Math.abs(x1 - x0) / 2, (height + WALL_SINK) / 2, Math.abs(z1 - z0) / 2),
+        motion: { period, phase, move: V(move[0], 0, move[1]), pivot: [0, 0, 0], axis: [0, 0, 0] } });
+    },
+    // spinner is a bar half long each side of (x, z), on the floor at y, turning round its middle once
+    // every period seconds (turn: 1 or -1, the way it turns)
+    spinner(x, z, y, half, { period = 4, phase = 0, turn = 1, height = 0.5, thick = 0.3 } = {}) {
+      const cy = y + (height - WALL_SINK) / 2;
+      return t.raw({ shape: 0, kind: 1, c: V(x, cy, z), rot: [0, 0, 0], h: V(half, (height + WALL_SINK) / 2, thick / 2),
+        motion: { period, phase, move: [0, 0, 0], pivot: V(x, cy, z), axis: [0, turn, 0] } });
+    },
+    // mole is a post of radius r at (x, z) that comes out of the floor at y and goes back, every period:
+    // its top low under the floor when down, high over it when up
+    mole(x, z, y, { r = 0.55, period = 3, phase = 0, low = 0.05, high = 0.75 } = {}) {
+      return t.raw({ shape: 1, kind: 2, c: V(x, y - low - 0.7, z), r, hh: 0.7,
+        motion: { period, phase: ((phase % 1) + 1) % 1, move: V(0, low + high, 0), pivot: [0, 0, 0], axis: [0, 0, 0] } });
+    },
+    // lake fills the box (x0, z0)-(x1, z1) with water at y, but under the rectangles keep ([x0, z0, x1, z1]:
+    // islands, roads): the floor in columns, the pools grown as large as they go, so that each has
+    // open water in its middle
+    lake(x0, z0, x1, z1, keep = [], y = -0.3) {
+      const q = v => Math.round(v * 1e4) / 1e4, rs = keep.map(r => [Math.min(r[0], r[2]), Math.min(r[1], r[3]), Math.max(r[0], r[2]), Math.max(r[1], r[3])]);
+      const cuts = (a, b, k) => [...new Set([a, b, ...rs.flatMap(r => [r[k], r[k + 2]])].map(q))].filter(v => v >= Math.min(a, b) && v <= Math.max(a, b)).sort((u, w) => u - w);
+      const xs = cuts(x0, x1, 0), zs = cuts(z0, z1, 1), nx = xs.length - 1, nz = zs.length - 1;
+      const inside = (x, z) => rs.some(r => x > r[0] && x < r[2] && z > r[1] && z < r[3]);
+      const free = [...Array(nx)].map((_, i) => [...Array(nz)].map((_, j) => !inside((xs[i] + xs[i + 1]) / 2, (zs[j] + zs[j + 1]) / 2)));
+      for (let i = 0; i < nx; i++) for (let j = 0; j < nz; j++) {
+        if (!free[i][j] || (j > 0 && free[i][j - 1])) continue;
+        let k = j; while (k + 1 < nz && free[i][k + 1]) k++;
+        t.floor(xs[i], zs[j], xs[i + 1], zs[k + 1], y);
+      }
+      const done = free.map(c => c.map(() => false)), box = (i0, i1, j0, j1) => { for (let i = i0; i <= i1; i++) for (let j = j0; j <= j1; j++) if (!free[i][j]) return false; return true; };
+      for (let i = 0; i < nx; i++) for (let j = 0; j < nz; j++) {
+        if (!free[i][j] || done[i][j]) continue;
+        const grow = xFirst => {
+          let i0 = i, i1 = i, j0 = j, j1 = j;
+          for (const ax of xFirst ? [0, 1] : [1, 0]) {
+            if (ax === 0) { while (i0 > 0 && box(i0 - 1, i0 - 1, j0, j1)) i0--; while (i1 + 1 < nx && box(i1 + 1, i1 + 1, j0, j1)) i1++; }
+            else { while (j0 > 0 && box(i0, i1, j0 - 1, j0 - 1)) j0--; while (j1 + 1 < nz && box(i0, i1, j1 + 1, j1 + 1)) j1++; }
+          }
+          return [i0, i1, j0, j1, (xs[i1 + 1] - xs[i0]) * (zs[j1 + 1] - zs[j0])];
+        };
+        const a = grow(true), b = grow(false), [i0, i1, j0, j1] = a[4] >= b[4] ? a : b;
+        for (let u = i0; u <= i1; u++) for (let v = j0; v <= j1; v++) done[u][v] = true;
+        const ax = xs[i0], bx = xs[i1 + 1], az = zs[j0], bz = zs[j1 + 1];
+        h.zones.push({ type: 'hazard', shape: 0, c: [q((ax + bx) / 2), y + 0.15, q((az + bz) / 2)], h: [q((bx - ax) / 2), 0.15, q((bz - az) / 2)] });
+      }
+      return t;
+    },
     // path lays a ribbon of floor from at ([x, y, z], the middle of its top) towards dir ([dx, dz]),
     // width wide; walls: 'both', 'left', 'right' or 'none' (each piece may say otherwise). Call end().
     path(at, dir, { width = 6, walls = 'both', wallH = WALL_H, material } = {}) {

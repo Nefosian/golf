@@ -1,7 +1,7 @@
 # Le nouveau pool : 20 idées de trous
 
-Statut : **construits** (2026-11-22), `tools/maps/holes/p01` à `p20`, tous acceptés par `tools/verify` ;
-**pas encore joués**. Les mesures sont en fin de document. Elles suivent
+Statut : **construits**, troisième version (2026-11-22), `tools/maps/holes/p01` à `p20`, tous acceptés
+par `tools/verify` ; à rejouer. Ils suivent
 les règles de `docs/recherche-parcours.md` § 4 et ne demandent rien de nouveau au moteur : des pièces
 du kit (`path`, `plate`, `green`, `bowl`, chutes) et les éléments gardés (herbe, glace, sable, eau, murs et poteaux, bumpers, accélérateurs, tremplins, canons, téléporteurs,
 tapis roulants, vent, aimants et répulseurs, clé et porte, pièce, point de reprise, obstacles mobiles).
@@ -11,30 +11,42 @@ Chaque trou a : un **niveau** pour le tirage (F facile, M moyen, D dur, S specta
 une **ligne sûre** et une **ligne risquée**, et un **moment à plusieurs** (là où les balles se
 retrouvent). Les par sont indicatifs : la longueur se règle en jouant (question ouverte, § 4 règle 3).
 
-| # | Nom | Niv. | Vedette | Par |
-| --- | --- | --- | --- | --- |
-| 1 | La Passerelle | F | pentes, cuvette | 3 |
-| 2 | Le Grand Entonnoir | F | cuvette géante | 2 |
-| 3 | Le Lacet | F | descente en lacets | 3 |
-| 4 | Les Dunes | F | sable | 3 |
-| 5 | Le Billard | F | bandes | 2 |
-| 6 | Le Trottoir Roulant | F | tapis roulants | 3 |
-| 7 | L'Île | M | eau | 3 |
-| 8 | La Patinoire | M | glace | 3 |
-| 9 | L'Autoroute | M | accélérateurs | 3 |
-| 10 | Le Col du Vent | M | vent | 3 |
-| 11 | L'Aimant | M | aimant, répulseurs | 3 |
-| 12 | Le Flipper | M | bumpers | 3 |
-| 13 | Les Portails | M | téléporteurs | 3 |
-| 14 | La Clé des Champs | D | clé et porte | 3 |
-| 15 | Les Moulins | D | obstacles mobiles | 3 |
-| 16 | Les Terrasses | D | chutes | 3 |
-| 17 | La Corniche | D | chemins sans murs | 3 |
-| 18 | Le Tremplin | S | tremplin | 3 |
-| 19 | Le Canon | S | canon | 3 |
-| 20 | Le Grand Huit | S | descente express | 3 |
+| # | Nom | Par | Éléments | Meilleur | Trou en un | Sortis |
+| --- | --- | --- | --- | --- | --- | --- |
+| 1 | La Passerelle | 3 | mole, moving | 2 | 0 | 3,7 % |
+| 2 | Le Grand Entonnoir | 2 | strokes, bumper | 1 | 5,8 % | 31,0 % |
+| 3 | Le Lacet | 3 | strokes, mole | 3 | 0 | 0,9 % |
+| 4 | Les Dunes | 3 | jumppad, hazard, sand | 1 | 0,1 % | 14,3 % |
+| 5 | Le Billard | 2 | strokes, bumper | 2 | 0 | 0 |
+| 6 | Le Trottoir Roulant | 3 | conveyor, strokes, moving, mole | 2 | 0 | 0 |
+| 7 | L'Archipel | 4 | checkpoint, jumppad, launcher, hazard | 2 | 0 | 18,0 % |
+| 8 | La Patinoire | 3 | sand, ice, moving | 2 | 0 | 0 |
+| 9 | L'Autoroute | 3 | speedpad, launcher, mole | 2 | 0 | 4,8 % |
+| 10 | Le Col du Vent | 4 | wind, checkpoint | 3 | 0 | 5,9 % |
+| 11 | L'Aimant | 3 | repeller, magnet, strokes | 1 | 1,3 % | 0 |
+| 12 | Le Flipper | 3 | strokes, bumper | 1 | 0 | 0 |
+| 13 | Les Portails | 3 | strokes, teleport, moving | 1 | 0 | 0 |
+| 14 | La Clé des Champs | 3 | key, wind, gate, moving | 2 | 0 | 0 |
+| 15 | Les Moulins | 4 | moving, mole | 2 | 0 | 0,8 % |
+| 16 | Les Terrasses | 3 | jumppad, strokes, sand | 1 | 0,3 % | 1,1 % |
+| 17 | La Corniche | 4 | checkpoint, mole, moving | 3 | 0 | 3,4 % |
+| 18 | Le Tremplin | 3 | speedpad, sand | 2 | 0 | 0 |
+| 19 | Le Canon | 3 | launcher, sand | 2 | 0 | 0 |
+| 20 | Le Grand Huit | 4 | speedpad | 2 | 0 | 0 |
 
-Soit 6 faciles, 7 moyens, 4 durs, 3 spectacles (la proportion proposée par la recherche).
+**Troisième version (2026-11-22, après la deuxième partie jouée)** : « des trous qui se ressemblent, pas
+assez durs ni arcade, et on n'utilise presque aucun élément ». Les gardiens (anneaux de poteaux autour
+du trou) sont retirés ; chaque trou a reçu un ou deux éléments de plus, sur sa ligne principale quand
+c'est possible (poussoirs, barres tournantes, taupes, geysers, canons, bandes rebondissantes, vents),
+des par de 2 à 4 ; L'Île est devenue L'Archipel (des îles sans route : chaussée, geyser, canon,
+passerelle). Ce que fait chaque trou est dit en tête de son script (`tools/maps/holes/`) ; les
+fiches ci-dessous sont celles de la première version.
+
+« Meilleur » : le moins de coups trouvés par `tools/verify` (un joueur parfait ; une pièce compte −1).
+`mapcheck -sweep` (120 directions × 19 puissances depuis le départ) : la part des tirs qui font un
+trou en un, et de ceux qui sortent. Éléments : ce que le JSON du trou contient (mole : une taupe,
+moving : un obstacle qui glisse ou tourne, strokes : une pièce, launcher : un canon, jumppad : un
+geyser).
 
 ## Les faciles
 
@@ -141,45 +153,3 @@ tremplin), le green en bas dans une cuvette. Sûre : freiner sur les paliers. Ri
   rien ».
 - **Retirer les 75 anciens trous** du tirage une fois les nouveaux construits.
 
-## Mesuré (2026-11-22, après la première partie jouée)
-
-Retours de la partie : Le Lacet ne se finissait pas par la route (sa seconde épingle tournait du
-mauvais côté : le troisième lacet repartait sous le premier) ; le reste « un peu trop facile ». D'où :
-Le Lacet refait (épingles larges, raccourcis par deux toboggans de 2 u au lieu de bords ouverts), des
-chemins et lignes risquées plus étroits, et un **gardien** autour de plusieurs trous (`guard` dans
-`tools/maps/lib.mjs` : un anneau de poteaux serrés, deux ou trois ouvertures) qui casse les entonnoirs
-qui menaient seuls au trou.
-
-`tools/verify` : le moins de coups trouvés depuis le départ (un joueur parfait). `mapcheck -sweep`
-(120 directions × 19 puissances depuis le départ) : la part des tirs qui font un trou en un, et de
-ceux qui sortent.
-
-| # | Nom | Par | Meilleur | Trou en un | Sortis |
-| --- | --- | --- | --- | --- | --- |
-| 1 | La Passerelle | 3 | 2 | 0 | 3,7 % |
-| 2 | Le Grand Entonnoir | 2 | 1 | 3,8 % | 0 |
-| 3 | Le Lacet | 3 | 3 | 0 | 0,3 % |
-| 4 | Les Dunes | 3 | 2 | 0 | 2,3 % |
-| 5 | Le Billard | 2 | 2 | 0 | 0 |
-| 6 | Le Trottoir Roulant | 3 | 2 | 0 | 0 |
-| 7 | L'Île | 3 | 2 | 0 | 0,8 % |
-| 8 | La Patinoire | 3 | 2 | 0 | 0 |
-| 9 | L'Autoroute | 3 | 2 | 0 | 0 |
-| 10 | Le Col du Vent | 3 | 2 | 0 | 6,1 % |
-| 11 | L'Aimant | 3 | 2 | 0,1 % | 0 |
-| 12 | Le Flipper | 3 | 2 | 0 | 0 |
-| 13 | Les Portails | 3 | 2 | 0 | 0 |
-| 14 | La Clé des Champs | 3 | 2 | 0 | 0 |
-| 15 | Les Moulins | 3 | 2 | 0 | 0 |
-| 16 | Les Terrasses | 3 | 2 | 0 | 2,1 % |
-| 17 | La Corniche | 3 | 3 | 0 | 3,4 % |
-| 18 | Le Tremplin | 3 | 1 | 0,1 % | 2,8 % |
-| 19 | Le Canon | 3 | 1 | 0,3 % | 0,6 % |
-| 20 | Le Grand Huit | 3 | 2 | 0 | 0 |
-
-Le Grand Entonnoir garde ses trous en un (le trou facile, par 2), surtout par la bande sur le mur
-derrière le départ ; Le Tremplin et Le Canon en gardent quelques-uns (les trous spectacle).
-
-Écarts aux idées : le tremplin du n° 18 est une rampe (une balle trop lente redescend), pas un plateau
-de saut ; le lac de L'Île est en deux bassins (rien sous le trou), d'où une bande de vide derrière
-l'île ; La Corniche est construite autour d'un gros bloc de roche nu.
