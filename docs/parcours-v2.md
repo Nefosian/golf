@@ -141,33 +141,44 @@ tremplin), le green en bas dans une cuvette. Sûre : freiner sur les paliers. Ri
   rien ».
 - **Retirer les 75 anciens trous** du tirage une fois les nouveaux construits.
 
-## Mesuré à la construction (2026-11-22)
+## Mesuré (2026-11-22, après la première partie jouée)
 
-`tools/verify` : le moins de coups trouvés depuis le départ. `mapcheck -sweep` (120 directions × 19
-puissances depuis le départ) : la part des tirs qui font un trou en un, et de ceux qui sortent.
+Retours de la partie : Le Lacet ne se finissait pas par la route (sa seconde épingle tournait du
+mauvais côté : le troisième lacet repartait sous le premier) ; le reste « un peu trop facile ». D'où :
+Le Lacet refait (épingles larges, raccourcis par deux toboggans de 2 u au lieu de bords ouverts), des
+chemins et lignes risquées plus étroits, et un **gardien** autour de plusieurs trous (`guard` dans
+`tools/maps/lib.mjs` : un anneau de poteaux serrés, deux ou trois ouvertures) qui casse les entonnoirs
+qui menaient seuls au trou.
 
-| # | Nom | Meilleur | Trou en un | Sortis |
-| --- | --- | --- | --- | --- |
-| 1 | La Passerelle | 1 | 0,1 % | 3,9 % |
-| 2 | Le Grand Entonnoir | 1 | **7,0 %** (voulu : le trou facile) | 0 |
-| 3 | Le Lacet | 2 | 0 | 1,8 % |
-| 4 | Les Dunes | 2 | 0 | 2,3 % |
-| 5 | Le Billard | 2 | 0 | 0 |
-| 6 | Le Trottoir Roulant | 2 | 0 | 0 |
-| 7 | L'Île | 1 | 0,1 % | 1,4 % |
-| 8 | La Patinoire | 1 | 1,1 % | 0 |
-| 9 | L'Autoroute | 2 | 0 | 0 |
-| 10 | Le Col du Vent | 2 | 0 | 8,1 % |
-| 11 | L'Aimant | 1 | 1,2 % | 0 |
-| 12 | Le Flipper | 2 | 0 | 0 |
-| 13 | Les Portails | 2 | 0 | 0 |
-| 14 | La Clé des Champs | 2 | 0 | 0 |
-| 15 | Les Moulins | 2 | 0 | 0 |
-| 16 | Les Terrasses | 1 | 0,9 % | 2,1 % |
-| 17 | La Corniche | 3 | 0 | 3,4 % |
-| 18 | Le Tremplin | 1 | 0,1 % | 2,8 % |
-| 19 | Le Canon | 1 | 1,3 % (presque tout tir dans le canon qui atterrit) | 0 |
-| 20 | Le Grand Huit | 2 | 0 | 0 |
+`tools/verify` : le moins de coups trouvés depuis le départ (un joueur parfait). `mapcheck -sweep`
+(120 directions × 19 puissances depuis le départ) : la part des tirs qui font un trou en un, et de
+ceux qui sortent.
+
+| # | Nom | Par | Meilleur | Trou en un | Sortis |
+| --- | --- | --- | --- | --- | --- |
+| 1 | La Passerelle | 3 | 2 | 0 | 3,7 % |
+| 2 | Le Grand Entonnoir | 2 | 1 | 3,8 % | 0 |
+| 3 | Le Lacet | 3 | 3 | 0 | 0,3 % |
+| 4 | Les Dunes | 3 | 2 | 0 | 2,3 % |
+| 5 | Le Billard | 2 | 2 | 0 | 0 |
+| 6 | Le Trottoir Roulant | 3 | 2 | 0 | 0 |
+| 7 | L'Île | 3 | 2 | 0 | 0,8 % |
+| 8 | La Patinoire | 3 | 2 | 0 | 0 |
+| 9 | L'Autoroute | 3 | 2 | 0 | 0 |
+| 10 | Le Col du Vent | 3 | 2 | 0 | 6,1 % |
+| 11 | L'Aimant | 3 | 2 | 0,1 % | 0 |
+| 12 | Le Flipper | 3 | 2 | 0 | 0 |
+| 13 | Les Portails | 3 | 2 | 0 | 0 |
+| 14 | La Clé des Champs | 3 | 2 | 0 | 0 |
+| 15 | Les Moulins | 3 | 2 | 0 | 0 |
+| 16 | Les Terrasses | 3 | 2 | 0 | 2,1 % |
+| 17 | La Corniche | 3 | 3 | 0 | 3,4 % |
+| 18 | Le Tremplin | 3 | 1 | 0,1 % | 2,8 % |
+| 19 | Le Canon | 3 | 1 | 0,3 % | 0,6 % |
+| 20 | Le Grand Huit | 3 | 2 | 0 | 0 |
+
+Le Grand Entonnoir garde ses trous en un (le trou facile, par 2), surtout par la bande sur le mur
+derrière le départ ; Le Tremplin et Le Canon en gardent quelques-uns (les trous spectacle).
 
 Écarts aux idées : le tremplin du n° 18 est une rampe (une balle trop lente redescend), pas un plateau
 de saut ; le lac de L'Île est en deux bassins (rien sous le trou), d'où une bande de vide derrière

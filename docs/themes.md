@@ -1,6 +1,7 @@
 # Thèmes : l'habillage des trous
 
-Statut : **construit** (2026-11-22) dans `web/scene.js` (`THEMES`, `SIDE`, `CROWN`, `dress()`), le
+Statut : **construit** (2026-11-22). Les chiffres et le thème de chaque trou plus bas portent sur
+les 75 trous d'avant, retirés depuis ; les thèmes eux-mêmes servent toujours. Construit dans `web/scene.js` (`THEMES`, `SIDE`, `CROWN`, `dress()`), le
 thème de chaque trou dans son script (`tools/maps/holes/`). Les couleurs ont été choisies par calcul
 (écart ΔE CIE76) puis regardées sur les aperçus et en jeu. Écarts à ce document : les poteaux de
 `quai` et de `ville` reprennent la tuile du poteau recolorée, le château a ses tourelles, et la

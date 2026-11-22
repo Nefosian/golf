@@ -2,7 +2,7 @@
 
 Minigolf multijoueur dans le navigateur. Ce dépôt est la **base propre** du jeu, réduite à
 l'essentiel : un serveur Go optimisé, le moteur physique et ses modificateurs (pads, bumpers,
-téléporteurs, zones, obstacles mobiles…), un pool de 75 trous (« Le pool de trous »), un client
+téléporteurs, zones, obstacles mobiles…), un pool de 20 trous (« Le pool de trous »), un client
 avec ses écrans d'avant-partie (accueil, salles, salon) et une vue 3D minimale.
 
 Le prototype d'origine (Node) et la première version Go complète (63 cartes, client Three.js)
@@ -365,22 +365,22 @@ et `once` pour n'agir qu'une fois par balle et par trou. 64 zones au plus par tr
 Toute vitesse reste sous 24 u/s, toute poussée sous 40 u/s². Une poussée plus faible que la
 résistance au roulement (2,2 u/s² sur l'herbe) ne fait pas repartir une balle arrêtée.
 
-**Le pool de trous** : 75 trous, `maps/h01-*.json` à `maps/h75-*.json`, conçus pour 3 à 10 joueurs
-qui tirent en même temps (les balles se cognent). Leurs concepts (la vedette de chaque trou, ses
-actes, ce que le jeu à plusieurs y crée, la ligne sûre et la ligne risquée) sont dans
-`docs/parcours-concepts.md` ; ce qui a été construit s'en écarte parfois, chaque script dit
-comment. Un JSON de `maps/` n'est jamais écrit à la main : il sort de son script.
+**Le pool de trous** : 20 trous, `maps/p01-*.json` à `maps/p20-*.json`, conçus pour 3 à 9 joueurs qui
+tirent en même temps (les balles se cognent). Leurs idées (le niveau, la vedette, la ligne sûre et la
+ligne risquée, ce que le jeu à plusieurs y crée) et leurs mesures sont dans `docs/parcours-v2.md`, les
+règles qui les guident dans `docs/recherche-parcours.md`. Les 75 trous d'avant (et
+`docs/parcours-concepts.md`) ont été retirés le 2026-11-22 : ils sont dans l'historique git. Un JSON de
+`maps/` n'est jamais écrit à la main : il sort de son script.
 
-- `tools/maps/holes/hNN-nom.mjs` décrit un trou avec les aides de `tools/maps/lib.mjs` (`floor`,
+- `tools/maps/holes/pNN-nom.mjs` décrit un trou avec les aides de `tools/maps/lib.mjs` (`floor`,
   `slab` une pente, `rail` des murs, `fence`, `block`, `post`, `water` un bassin, `pad`/`disc`
   des zones, `tee`, `cup`), et ses pièces arrondies : `path` (chemin à murs, lignes droites qui montent
   ou descendent, virages plats), `plate` et `green` (plateaux `roundRect` ou `disc`, avec ouvertures),
-  `bowl` (cuvette). Le pool refait autour de ces pièces : `p01` à `p20` (voir
-  `docs/recherche-parcours.md` et `docs/parcours-v2.md`), à côté des 75 anciens pour l'instant ;
+  `bowl` (cuvette) ;
 - avec `DEV_MAPS=1 go run .`, un trou reconstruit est joué à la partie suivante, sans relancer le
   serveur (un fichier ajouté ou retiré demande un redémarrage) ;
-- `node tools/maps/build.mjs hNN` écrit `maps/hNN-nom.json` (sans argument : tous) ;
-- `go run ./tools/mapcheck -file maps/hNN-nom.json -verify` dit ce que `tools/verify` pense de ce
+- `node tools/maps/build.mjs pNN` écrit `maps/pNN-nom.json` (sans argument : tous) ;
+- `go run ./tools/mapcheck -file maps/pNN-nom.json -verify` dit ce que `tools/verify` pense de ce
   seul trou ; `-sweep` montre où finissent les tirs du départ (`-from x,y,z` : d'ailleurs), et
   `-shot degrés,puissance` suit un tir image par image ;
 - enfin `go run ./tools/verify` sur tout le pool.
@@ -422,8 +422,9 @@ joueur la voit nommée dans un bandeau ; une clé ou un bonus pris disparaît.
 Le parcours n'est pas dessiné boîte par boîte (`floorMeshes`, `wallMeshes` dans `web/scene.js`) : les sols
 fixes sont fusionnés par carrés de 8 u, sans les faces cachées entre deux sols ; les murs simples sont
 suivis bout à bout et dessinés comme un seul mur (en onglet aux angles, lissé dans les courbes douces),
-avec un contour et une couronne continus, par morceaux de 4 u (un mur devant la caméra s'efface morceau
-par morceau). Mesuré sur La Passerelle (662 colliders) : 271 appels de dessin par image au lieu de 4 633.
+avec un contour et une couronne continus. Rien ne s'efface devant la caméra : les murs sont bas (choix
+du 2026-11-22, l'effacement rendait aussi transparents le drapeau et les sols à plusieurs étages).
+Mesuré sur La Passerelle (662 colliders) : 271 appels de dessin par image au lieu de 4 633.
 
 Une zone est déjà un volume, pas une surface : le vent agit sur la balle dans toute sa hauteur (`h`
 d'une boîte, `hh` d'un cylindre), en l'air comme au sol. Pour un vent qui souffle dans les airs, la

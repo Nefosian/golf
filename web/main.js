@@ -239,7 +239,6 @@ function frame() {
   const k = 1 - Math.exp(-dt * 8);
   shown = shown.map((v, i) => v + (want[i] - v) * k);
   view.look(shown[0], shown[1], shown[2], cam.yaw, shown[3], shown[4]);
-  view.tracking = follow; // walls between the camera and our ball fade while it follows it
 
   if (drag && !canAim()) drag = null;
   const shot = drag && aim(now);

@@ -6,9 +6,9 @@ import { hole, roundRect } from '../lib.mjs';
 // coming out of the hairpin.
 export default () => {
   const t = hole("L'Autoroute", { theme: 'ville', par: 3 });
-  t.plate(roundRect(-5, -3, 5, 3, 1.5), 0, { open: [[0, -3, 6]] });
-  t.path([0, 0, -3], [0, -1], { width: 6 }).straight(16).turn(-180, 6).straight(16).done();
-  for (const z of [-6, -10, -14]) t.pad('speedpad', -3, z - 1.2, -0.2, z, 0, { dir: [0, 0, -1], speed: 14 });
-  for (const z of [-16, -12]) t.pad('speedpad', 12.2, z, 15, z + 1.2, 0, { dir: [0, 0, 1], speed: 14 });
-  return t.green(roundRect(7, -3, 17, 5, 2), 0, 12, 2, { open: [[12, -3, 6]] }).tee(0, 0, 1);
+  t.plate(roundRect(-5, -3, 5, 3, 1.5), 0, { open: [[0, -3, 5]] });
+  t.path([0, 0, -3], [0, -1], { width: 5 }).straight(16).turn(-180, 6).straight(16).done();
+  for (const z of [-6, -10, -14]) t.pad('speedpad', -2.5, z - 1.2, -0.2, z, 0, { dir: [0, 0, -1], speed: 14 });
+  for (const z of [-16, -12]) t.pad('speedpad', 12.2, z, 14.5, z + 1.2, 0, { dir: [0, 0, 1], speed: 14 });
+  return t.green(roundRect(7, -3, 17, 5, 2), 0, 12, 2, { open: [[12, -3, 5]] }).tee(0, 0, 1);
 };

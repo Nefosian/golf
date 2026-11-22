@@ -278,8 +278,10 @@ function pieces(t) {
           return P.straight(D - meet).straight(meet - end, { walls: 'none' });
         },
         get end() { return { at: [...p], dir: [...d] }; },
-        // done builds the boxes; it gives the end of the path
-        done() {
+        // done builds the boxes; it gives the end of the path. Both ends must lie on another floor
+        // (checked by build.mjs), but an end said open: 'start', 'end' or 'both' (a kicker's lip)
+        done({ open } = {}) {
+          const from = h.colliders.length, ends = h.ends ??= [];
           const right = q => [-q.d[1], 0, q.d[0]], edge = (q, side) => add3(q.p, mul3(right(q), side * width / 2));
           for (let i = 0; i + 1 < s.length; i++) {
             const a = s[i], b = s[i + 1], x = unit3(sub3(b.p, a.p)), up = cross3(unit3(cross3(x, [0, 1, 0])), x);
@@ -288,6 +290,8 @@ function pieces(t) {
             if (b.walls[0]) h.colliders.push(wallOn(edge(a, -1), edge(b, -1), up, -1, wallH));
             if (b.walls[1]) h.colliders.push(wallOn(edge(a, 1), edge(b, 1), up, 1, wallH));
           }
+          const own = [from, h.colliders.length];
+          ends.push({ at: s[0].p, open: open === 'start' || open === 'both', own }, { at: p, open: open === 'end' || open === 'both', own });
           return P.end;
         },
       };
@@ -307,8 +311,25 @@ function clipOut(a, b, ox, oz, r) {
   return out;
 }
 
+// loose gives the ends of paths that lie on no other floor (but those said open): a path that leads
+// into the void, or that turned the wrong way
+export function loose(h) {
+  const euler = ([x, y, z]) => { const a = Math.cos(x), b = Math.sin(x), c = Math.cos(y), d = Math.sin(y), e = Math.cos(z), f = Math.sin(z);
+    return [c * e, -c * f, d, a * f + b * e * d, a * e - b * f * d, -b * c, b * f - a * e * d, b * e + a * f * d, a * c]; };
+  const on = (q, c) => {
+    const m = euler(c.rot ?? [0, 0, 0]), r = [q[0] - c.c[0], q[1] - c.c[1], q[2] - c.c[2]];
+    const l = [0, 1, 2].map(k => m[k] * r[0] + m[3 + k] * r[1] + m[6 + k] * r[2]); // m transposed: into the box's frame
+    return Math.abs(l[0]) <= c.h[0] + 0.05 && Math.abs(l[2]) <= c.h[2] + 0.05 && Math.abs(l[1] - c.h[1]) < 0.35;
+  };
+  return (h.ends ?? []).filter(e => {
+    if (e.open) return false;
+    const [a, b] = e.own, q = e.at;
+    return !h.colliders.some((c, i) => (i < a || i >= b) && c.kind === 0 && c.shape === 0 && on(q, c));
+  }).map(e => e.at.map(v => +v.toFixed(2)));
+}
+
 export function emit(h) {
-  const { name, tee, cup, colliders, zones, ...rest } = h;
+  const { name, tee, cup, colliders, zones, ends, ...rest } = h;
   const one = o => JSON.stringify(o).replace(/,/g, ', ').replace(/":/g, '": ');
   const head = Object.entries({ name, tee, cup, ...rest }).map(([k, v]) => `  ${JSON.stringify(k)}: ${one(v)}`);
   let s = '{\n' + head.join(',\n') + ',\n  "colliders": [\n' + colliders.map(o => '    ' + one(o)).join(',\n') + '\n  ]';

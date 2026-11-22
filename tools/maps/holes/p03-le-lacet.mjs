@@ -1,21 +1,27 @@
 import { hole, roundRect } from '../lib.mjs';
 
-// Le Lacet (easy, par 3): a long way down in three switchbacks (sloped straights, flat hairpins), the
-// green at the bottom. Safe: follow the road. Risky: in the middle of a switchback the wall on the side
-// of the next one down is open, and so is that one's: a ball with enough speed jumps the 1-wide gap and
-// lands on the road below, 1.5 lower (too slow, it falls: +1). Balls that cut land in front of those on the road.
+// Le Lacet (easy, par 3): a long way down in three switchbacks, the green at the bottom. Each switchback
+// slopes down, flat in its middle; hairpins are flat. Safe: follow the road. Risky: in the flat middle
+// of a switchback, a 2-wide gap in the wall opens on a chute (no walls) straight down to the next one,
+// 1.5 lower: aim at the gap, keep on the chute. The second switchback is open on both sides there: a
+// ball coming down the first chute may go on down the second. Balls that cut land among the others.
 export default () => {
   const t = hole('Le Lacet', { theme: 'canyon', par: 3 });
-  const w = 5, r = 3; // the road; its hairpins (the switchbacks 2r apart: a gap of 1 between them)
-  t.plate(roundRect(0, -4, 7, 4, 1.5), 5.5, { open: [[0, 0, w]] });
-  // 'left' keeps the wall on the left only: here the open side faces the switchback below
-  t.path([0, 5.5, 0], [-1, 0], { width: w })
-    .straight(3, { rise: -0.65 }).straight(4, { rise: -0.6, walls: 'left' }).straight(3, { rise: -0.65 })
-    .turn(-180, r)
-    .straight(3, { rise: -0.65, walls: 'right' }).straight(4, { rise: -0.6, walls: 'left' }).straight(3, { rise: -0.65 })
-    .turn(-180, r)
-    .straight(3, { rise: -0.65 }).straight(4, { rise: -0.6 }).straight(3, { rise: -0.65, walls: 'right' })
-    .done();
-  t.green(roundRect(-19, -17, -10, -7, 2), 1, -15.5, -12, { open: [[-10, -12, w]] });
-  return t.tee(4, 5.5, 0);
+  const w = 4.5, r = 4.5, gap = 2; // the road; its hairpins (switchbacks 2r apart); the chutes' width
+  const top = 5.5, step = 0.75;    // the tee's height; each slope (two a switchback)
+  t.plate(roundRect(0, -4, 7, 4, 1.5), top, { open: [[0, 0, w]] });
+  // a switchback: down, a flat middle (where the chutes are), down; walls: of the middle
+  const sw = (P, first, walls) => (first ? P.straight(3.25, { rise: -step }).straight(gap, { walls }).straight(4.75, { rise: -step })
+    : P.straight(4.75, { rise: -step }).straight(gap, { walls }).straight(3.25, { rise: -step }));
+  const P = t.path([0, top, 0], [-1, 0], { width: w });
+  sw(P, true, 'left').turn(-180, r);          // west, open on its south side
+  sw(P, false, 'none').turn(180, r);          // east, open on both sides
+  sw(P, true, 'right').done();                // west again, open on its north side
+  // the chutes, between the flat middles (x -3.25 to -5.25), from one road's edge to the next one's
+  const mid = -4.25, ys = [top - step, top - 3 * step, top - 5 * step];
+  for (let k = 0; k < 2; k++) {
+    const z0 = -2 * r * k - w / 2, z1 = -2 * r * (k + 1) + w / 2, drop = ys[k] - ys[k + 1], slope = drop / (z0 - z1);
+    t.slab([mid, ys[k], z0 + 0.2], [mid, ys[k + 1] - slope * 0.4, z1 - 0.2], gap); // in under both roads' edges
+  }
+  return t.green(roundRect(-19, -23, -10, -13, 2), top - 6 * step, -15.5, -18, { open: [[-10, -18, w]] }).tee(4, top, 0);
 };

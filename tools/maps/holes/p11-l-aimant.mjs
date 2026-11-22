@@ -9,8 +9,8 @@ export default () => {
   const [cx, cz, R] = [0, -24, 6];
   t.plate(roundRect(-6, -2, 6, 3, 1.5), 0, { open: [[0, -2, 9]] });
   t.path([0, 0, -2], [0, -1], { width: 9 }).reach(cx, cz, R).done();
-  t.disc('magnet', -1.7, -11, 2, 0, { at: [-1.7, 0, -11], accel: -7 });
-  t.disc('magnet', 1.7, -11, 2, 0, { at: [1.7, 0, -11], accel: -7 });
-  t.disc('magnet', cx, cz, 4.5, 0, { at: [cx, 0, cz], accel: 2 });
+  t.disc('magnet', -1.4, -11, 2, 0, { at: [-1.4, 0, -11], accel: -8 });
+  t.disc('magnet', 1.4, -11, 2, 0, { at: [1.4, 0, -11], accel: -8 });
+  t.disc('magnet', cx, cz, 3.5, 0, { at: [cx, 0, cz], accel: 1.4 });
   return t.green(disc(cx, cz, R), 0, cx, cz, { open: [entry(cx, cz, R, cx, -2, 9)] }).tee(0, 0, 1.5);
 };

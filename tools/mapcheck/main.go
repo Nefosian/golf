@@ -2,10 +2,10 @@
 // what tools/verify says of it, where shots from the tee (or a spot) end up, and the trace of one
 // shot. A building tool, for tools/maps; the game does not use it.
 //
-//	go run ./tools/mapcheck -file maps/h02-la-cuvette.json -verify
-//	go run ./tools/mapcheck -file maps/h02-la-cuvette.json -sweep
-//	go run ./tools/mapcheck -file maps/h09-tir-groupe.json -from 0,0,-16 -sweep
-//	go run ./tools/mapcheck -file maps/h08-le-carrefour.json -shot 210,0.8
+//	go run ./tools/mapcheck -file maps/p01-la-passerelle.json -verify
+//	go run ./tools/mapcheck -file maps/p01-la-passerelle.json -sweep
+//	go run ./tools/mapcheck -file maps/p07-l-ile.json -from 0,0,-13 -sweep
+//	go run ./tools/mapcheck -file maps/p19-le-canon.json -shot 99,0.8
 //
 // -sweep shoots 360 angles (-angles, from -a0 to -a1 degrees) × powers 0.1 to 1 by 0.05 from the spot, on
 // frame 0 (-frame), and counts the floor bounces: a ramp or a turn that is not smooth makes the ball hop.

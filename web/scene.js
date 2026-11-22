@@ -515,9 +515,6 @@ export class View {
     this.scene = new THREE.Scene();
     this.camera = new THREE.PerspectiveCamera(55, 1, 0.1, 600);
     this.target = new THREE.Vector3(); // what the camera looks at (look)
-    this.raycaster = new THREE.Raycaster();
-    this.faded = new Map(); // mesh of the course -> { fade, until, parts }: drawn see-through (seeThrough)
-    this.tracking = false; // the camera follows our ball (main.js): seeThrough works then only
     const sun = this.sun = new THREE.DirectionalLight(0xffffff, 2.2);
     sun.position.set(-0.5, 0.85, 0.4);
     // shadows: what stands on the course (walls, props, balls) shades the ground, the light fitted to
@@ -557,7 +554,6 @@ export class View {
   setHole(hole) {
     if (this.course) {
       this.scene.remove(this.course);
-      for (const f of this.faded.values()) for (const { m, solid, twin } of f.parts ?? []) { m.material = solid; for (const t of twin) t.dispose(); } // its own materials back, to be disposed
       this.course.traverse(o => { if (!o.userData.kit) o.geometry?.dispose(); if (o.userData.own) { o.material.map?.dispose(); o.material.dispose(); } });
     }
     this.moving = [];
@@ -569,7 +565,6 @@ export class View {
     this.gusts = [];    // the streaks of each wind
     this.floating = []; // the sparkles of each teleporter
     this.bouncing = []; // the plates of the jump pads
-    this.faded = new Map(); // of the course before (it goes)
     this.swimming = []; // { o, y, cx, cz, rx, rz, speed, phase }: the sharks in the hazards
     if (this.effects) { this.scene.remove(this.effects); this.effects.traverse(o => { if (o.isInstancedMesh) o.dispose(); else if (o.userData.own) o.geometry.dispose(); }); }
     this.effects = new THREE.Group(); // what moves through the zones, out of the course: the cameras frame the course alone
@@ -1255,55 +1250,7 @@ export class View {
     this.target.set(x, y, z);
   }
 
-  // seeThrough draws see-through what of the course stands between the camera and our ball while it
-  // follows it (tracking): a tall wall, a lintel, a floor over a lower one never hides it. What starts
-  // or stops hiding it fades in a fifth of a second, and stays faded a moment: no flicker as the
-  // camera grazes an edge.
-  seeThrough() {
-    const now = performance.now() / 1000, dt = Math.min(0.1, now - (this.fadeAt ?? now));
-    this.fadeAt = now;
-    const hit = new Set();
-    if (this.course && this.tracking) {
-      this.scene.updateMatrixWorld(); // the course may have just been built: its meshes' places are not known yet
-      for (const up of [0, 0.25]) { // the ball, and a little over it
-        const to = this.target.clone(), from = this.camera.position;
-        to.y += up;
-        const dir = to.sub(from), dist = dir.length();
-        this.raycaster.set(from, dir.divideScalar(dist || 1));
-        this.raycaster.far = Math.max(0, dist - 0.4);
-        this.raycaster.camera = this.camera;
-        for (const { object } of this.raycaster.intersectObject(this.course, true)) {
-          const o = object.name === 'ink' || object.material === HULL_MAT ? object.parent : object; // the ink goes with its shape
-          if (o?.isMesh) hit.add(o);
-        }
-      }
-    }
-    for (const o of hit) {
-      const f = this.faded.get(o) ?? { fade: 0 };
-      f.until = now + 0.35;
-      this.faded.set(o, f);
-    }
-    for (const [o, f] of this.faded) {
-      f.fade = Math.max(0, Math.min(1, f.fade + (now < f.until ? 1 : -1) * dt * 5));
-      if (f.fade > 0 && !f.parts) { // its see-through twin, its own (each fades on its own)
-        f.parts = [];
-        o.traverse(m => {
-          if (!m.isMesh) return;
-          const solid = m.material, twin = (Array.isArray(solid) ? solid : [solid]).map(s => Object.assign(s.clone(), { transparent: true, depthWrite: false }));
-          f.parts.push({ m, solid, twin });
-          m.material = Array.isArray(solid) ? twin : twin[0];
-        });
-      }
-      if (f.parts) for (const { twin } of f.parts) for (const t of twin) t.opacity = 1 - 0.78 * f.fade;
-      if (f.fade === 0 && now >= f.until) {
-        for (const { m, solid, twin } of f.parts ?? []) { m.material = solid; for (const t of twin) t.dispose(); }
-        this.faded.delete(o);
-      }
-    }
-  }
-
   render() {
-    this.seeThrough();
     const at = new THREE.Vector3();
     for (const { o } of this.spinning) if (o.userData.facing) { // a token shows its number: it faces the camera
       o.getWorldPosition(at);
@@ -1319,8 +1266,7 @@ export class View {
 // put are merged, a few meshes per square of the course, without the sides that lie inside other
 // floors (their seams showed as lines); and the plain walls are followed from end to end and drawn as
 // one wall, mitred where two meet, shaded smooth through a gentle turn, with one outline and one crown.
-const REGION = 8;  // floors are merged by squares this wide: a see-through floor fades with its square
-const CHUNK = 4;   // a wall is drawn in pieces about this long: it fades piece by piece
+const REGION = 8;  // floors are merged by squares this wide (what is off screen is not drawn)
 const SMOOTH = Math.cos(30 * Math.PI / 180); // two walls meeting at a gentler turn than this are shaded as one
 const SINK = 0.004; // the top of a wall's outline, under its top (a wall that joins it would show it as a line)
 const boxMatrix = c => new THREE.Matrix4().compose(new THREE.Vector3(...c.c), new THREE.Quaternion().setFromEuler(new THREE.Euler(...(c.rot ?? [0, 0, 0]))), new THREE.Vector3(1, 1, 1));
@@ -1407,8 +1353,8 @@ function floorMeshes(floors, lip) {
 
 // wallMeshes draws the plain walls that stay put (a box each): each end of a wall goes on with the wall
 // whose end is closest to it, if they are the same size, near enough and turn by less than 100°, the
-// two choosing each other. A run of walls so joined (or a ring of them) is one wall, cut into pieces
-// about CHUNK long, each with its outline and its crown (theme T).
+// two choosing each other. A run of walls so joined (or a ring of them) is one wall, with its outline
+// and its crown (theme T).
 function wallMeshes(walls, colliders, T) {
   const segs = walls.map(c => {
     // a turned wall runs along its x (tools/maps/lib.mjs: rail, path, plate), even a facet shorter than
@@ -1525,10 +1471,8 @@ function wallMeshes(walls, colliders, T) {
       crown = { R: rings(profile), Rink: rings(inkProfile), profile, inkProfile, smooth: [false, false, false, false] };
     }
     const plain = [false, false, false, false], side = T.wall[0], top = T.wall[2];
-    for (let k0 = 0; k0 < n;) {
-      let k1 = k0 + 1;
-      while (k1 < n && arc[k1 + 1] - arc[k0] <= CHUNK) k1++;
-      const body = new Soup(), outline = new Soup();
+    {
+      const k0 = 0, k1 = n, body = new Soup(), outline = new Soup();
       sweep(body, R, wall, plain, k0, k1, f => (f.y > 0.5 ? top : side));
       sweep(outline, Rink, ink, plain, k0, k1, () => HULL_MAT);
       const mesh = body.mesh(), inkMesh = outline.mesh(HULL_MAT);
@@ -1555,7 +1499,6 @@ function wallMeshes(walls, colliders, T) {
         }
       }
       meshes.push(mesh);
-      k0 = k1;
     }
   }
   return meshes;
