@@ -1,0 +1,11 @@
+# only what the build needs; the pictures of the holes are drawn in the build
+*
+!go.mod
+!go.sum
+!*.go
+!web
+web/previews
+!maps
+!internal
+!tools/verify
+!tools/previews

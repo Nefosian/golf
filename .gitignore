@@ -1,0 +1,5 @@
+/trou-normand
+*.test
+*.prof
+# drawn by tools/previews (the image build draws its own)
+/web/previews/

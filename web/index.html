@@ -1,0 +1,114 @@
+<!doctype html>
+<html lang="fr">
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>P’tits Trous</title>
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='-19 4.5 102 102'><g stroke='%23fff7e6' stroke-linecap='round' stroke-linejoin='round'><ellipse cx='30' cy='84' rx='26' ry='15' fill='%23fff7e6' stroke-width='16'/><path d='M30 84V12' stroke-width='16'/><path d='M34 12 60 24 34 37Z' fill='%23fff7e6' stroke-width='15'/></g><g stroke='%2317332b' stroke-linecap='round' stroke-linejoin='round'><ellipse cx='30' cy='84' rx='26' ry='15' fill='%2317332b' stroke-width='7'/><path d='M30 84V12' stroke-width='7'/><path d='M34 12 60 24 34 37Z' fill='%23e63946' stroke-width='6'/></g></svg>">
+<link rel="stylesheet" href="style.css">
+
+<canvas id="view"></canvas>
+
+<!-- during a game (web/hud.js): the menu top left, the ranking top right, the strokes at the bottom;
+     the top of the screen in between stays clear, the course and the aim are there -->
+<button id="menu-btn" class="hud" type="button" aria-label="Menu" data-t-label="menu"><i></i><i></i><i></i></button>
+<button id="mini" class="hud" type="button" aria-label="Classement complet" data-t-label="ranking.full"></button>
+<div id="bar" class="hud-row">
+  <div id="strokes" class="hud"><span class="lbl" data-t="hud.strokes">Coups</span><span id="strokes-n" class="big"></span></div>
+  <div id="timer" class="hud" hidden><span class="lbl" data-t="hud.timer">Fin du trou</span><span id="timer-n" class="big"></span></div>
+</div>
+<div id="splash" class="hud" hidden><p id="splash-n" class="n"></p><p id="splash-t" class="t"></p><span id="splash-m" class="chip"></span></div>
+<div id="banner" class="hud" hidden></div>
+<div id="overlay" hidden></div>
+
+<!-- before a game (web/front.js): the home, the room and its settings, the end of a game -->
+<main id="front">
+  <div id="home" hidden>
+    <header class="brand">
+      <div id="lang" class="lang"><button id="lang-btn" type="button" aria-haspopup="listbox" aria-expanded="false" aria-label="Langue" data-t-label="lang"></button><ul id="lang-list" role="listbox" aria-label="Langue" data-t-label="lang" hidden></ul></div>
+      <h1 aria-label="P’tits Trous">
+        <span aria-hidden="true">P’tits Tr<span class="o"><svg class="cup" viewBox="0 0 64 104"><ellipse cx="30" cy="84" rx="26" ry="15"/><path class="pole" d="M30 84V12"/><path class="pennant" d="M34 12 60 24 34 37Z"/></svg><i class="plop"></i></span>us</span>
+      </h1>
+    </header>
+    <div id="home-side" class="stack">
+      <section id="me" class="card me" aria-labelledby="me-title">
+        <h2 id="me-title" data-t="me.title">Ton joueur</h2>
+        <div class="who"><i id="me-ball" class="ball big"></i><input id="me-name" class="field" maxlength="16" autocomplete="nickname" spellcheck="false" aria-label="Pseudo" data-t-label="me.name"></div>
+        <div id="me-colors" class="swatches" role="radiogroup" aria-label="Couleur de ta balle" data-t-label="me.colors"></div>
+      </section>
+      <section class="card" aria-labelledby="play-title">
+        <h2 id="play-title" data-t="play.title">Jouer</h2>
+        <div class="stack">
+          <button id="create" class="btn red big" type="button" data-t="create">Créer une salle</button>
+          <form id="code" class="row">
+            <input id="code-input" class="field code" maxlength="5" placeholder="CODE" aria-label="Code de la salle" data-t-label="code.label" autocomplete="off" autocapitalize="characters" spellcheck="false">
+            <button class="btn sun" data-t="join">Rejoindre</button>
+          </form>
+        </div>
+      </section>
+    </div>
+    <!-- the public rooms: the whole height on the right, the list scrolls inside -->
+    <section class="card list-card" aria-labelledby="rooms-title">
+      <h2 id="rooms-title" data-t="rooms.title">Salles publiques</h2>
+      <ul id="rooms" class="rooms"></ul>
+      <p id="rooms-empty" class="empty" hidden data-t="rooms.empty">Aucune salle publique pour l’instant.</p>
+    </section>
+  </div>
+
+  <div id="lobby" hidden>
+    <section class="card top">
+      <span class="brand-mini">P’tits Trous</span>
+      <input id="room-name-input" class="field name" maxlength="24" autocomplete="off" aria-label="Nom de la salle" data-t-label="room.name">
+      <h2 id="room-name" class="name"></h2>
+      <span class="seg ctl pub" data-seg="public"><button data-v="false"><svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><rect x="5" y="11" width="14" height="10" rx="2"/><path d="M8 11V8a4 4 0 0 1 8 0v3"/></svg><span data-t="private">Privée</span></button><button data-v="true"><svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M3 12h18M12 3c3 3.2 3 14.8 0 18M12 3c-3 3.2-3 14.8 0 18"/></svg><span data-t="public">Publique</span></button></span>
+      <span id="room-public" class="v tag"><svg class="ico lock" viewBox="0 0 24 24" aria-hidden="true"><rect x="5" y="11" width="14" height="10" rx="2"/><path d="M8 11V8a4 4 0 0 1 8 0v3"/></svg><svg class="ico globe" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M3 12h18M12 3c3 3.2 3 14.8 0 18M12 3c-3 3.2-3 14.8 0 18"/></svg><span></span></span>
+      <div class="ticket"><span data-t="room.code">Code</span><b id="room-code"></b></div>
+      <button id="invite" class="btn sun small swap" type="button"><span data-t="invite">Copier le lien</span><span data-t="copied" aria-hidden="true">Lien copié !</span></button>
+      <button id="leave" class="btn plain small" type="button" data-t="leave">Quitter</button>
+    </section>
+    <div id="lobby-side" class="side">
+      <!-- "Ton joueur" comes here from the home -->
+      <section class="card players" aria-labelledby="players-title">
+        <!-- the seats show the most players there can be: the owner sets it with − and + -->
+        <div class="phead"><h2 id="players-title" data-t="players">Joueurs</h2><span class="stepper duo ctl" data-num="max" role="group" aria-label="Joueurs au plus" data-t-label="set.max"><button data-d="-1" aria-label="Moins" data-t-label="less">−</button><button data-d="1" aria-label="Plus" data-t-label="more">+</button></span></div>
+        <ul id="seats" class="seats"></ul>
+      </section>
+    </div>
+    <section class="card settings" aria-labelledby="settings-title">
+      <h2 id="settings-title" data-t="game.title">La partie</h2>
+      <!-- the course: how it is made (owner) or what it is (the others), then its holes in pictures -->
+      <div class="chead">
+        <span class="seg ctl" data-seg="mode"><button data-v="random" data-t="random">Au hasard</button><button data-v="custom" data-t="custom">Sur mesure</button></span>
+        <span id="draw" class="ctl draw"><span class="stepper" data-num="holes"><button data-d="-1" aria-label="Moins" data-t-label="less">−</button><span class="val"><input inputmode="numeric" aria-label="Nombre de trous" data-t-label="set.holes"></span><button data-d="1" aria-label="Plus" data-t-label="more">+</button></span><span id="draw-of"></span></span>
+        <span id="course-count" class="ctl count"></span>
+        <p id="course-sum" class="v sum"></p>
+      </div>
+      <div id="strip" class="strip"></div>
+      <div class="set"><span class="k" data-t="set.collisions">Les balles se cognent</span><span class="seg ctl" data-seg="collisions"><button data-v="true" data-t="yes">Oui</button><button data-v="false" data-t="no">Non</button></span><span class="v" data-val="collisions"></span></div>
+      <div class="set"><span class="k" data-t="set.strokes">Coups par trou</span><span class="stepper ctl" data-num="strokes"><button data-d="-1" aria-label="Moins" data-t-label="less">−</button><span class="val"><input inputmode="numeric" aria-label="Coups par trou" data-t-label="set.strokes"></span><button data-d="1" aria-label="Plus" data-t-label="more">+</button></span><span class="v" data-val="strokes"></span></div>
+      <div class="set"><span class="k" data-t="set.countdown">Temps après le premier arrivé</span><span class="stepper ctl" data-num="countdown"><button data-d="-1" aria-label="Moins" data-t-label="less">−</button><span class="val"><input inputmode="numeric" aria-label="Temps après le premier arrivé, en secondes" data-t-label="set.countdown.label"><span class="unit">s</span></span><button data-d="1" aria-label="Plus" data-t-label="more">+</button></span><span class="v" data-val="countdown"></span></div>
+      <div class="set"><span class="k" data-t="set.limit">Temps par trou</span><span class="stepper ctl" data-num="limit"><button data-d="-1" aria-label="Moins" data-t-label="less">−</button><span class="val"><input inputmode="numeric" aria-label="Temps par trou, en minutes" data-t-label="set.limit.label"><span class="unit">min</span></span><button data-d="1" aria-label="Plus" data-t-label="more">+</button></span><span class="v" data-val="limit"></span></div>
+      <div class="go"><button id="start" class="btn red big" type="button" data-t="start">Lancer la partie</button><p id="waiting" class="waiting"></p></div>
+    </section>
+  </div>
+</main>
+<div id="end"></div>
+<div id="front-overlay" hidden></div>
+
+<div id="toast" role="status" hidden></div>
+<div id="status" role="status" data-t="status.connecting">Connexion…</div>
+
+<!-- the game is played with a mouse: a device whose main pointer is a finger (phone, tablet) gets this instead, and the
+     game is not even loaded -->
+<main id="pc-only" hidden>
+  <p class="brand-title">P’tits Trous</p>
+  <section class="card">
+    <h2 data-t="pc.title">Le jeu se joue sur ordinateur</h2>
+    <p data-t="pc.text">P’tits Trous se joue à la souris. Ouvre ce lien sur un ordinateur pour jouer avec tes potes :</p>
+    <p id="pc-link" class="ticket-link"></p>
+  </section>
+</main>
+<script>
+  if (!matchMedia('(pointer: coarse)').matches) document.head.append(Object.assign(document.createElement('script'), { type: 'module', src: 'main.js' }));
+  else { document.body.dataset.screen = 'pc-only'; document.getElementById('pc-only').hidden = false; document.getElementById('pc-link').textContent = location.href; import('./i18n.js').then(m => m.translate()); }
+</script>
+</html>
