@@ -8,8 +8,9 @@ import { t } from './i18n.js';
 import { $, el, ball, button, crown, dialog, windows, copyLink } from './ui.js';
 
 // ---------------------------------------------------------------------------- settings
-// Kept by the browser. sensitivity multiplies the camera turn; names shows the other players' names.
-export const settings = { volume: 100, sensitivity: 100, names: true };
+// Kept by the browser. sensitivity multiplies the camera turn; names shows the other players' names;
+// lite asks for lighter graphics (View.setLite).
+export const settings = { volume: 100, sensitivity: 100, names: true, lite: false };
 try { Object.assign(settings, JSON.parse(localStorage.getItem('tn-settings'))); } catch {}
 const saveSettings = () => { try { localStorage.setItem('tn-settings', JSON.stringify(settings)); } catch {} };
 setVolume(settings.volume / 100);
@@ -156,6 +157,7 @@ function settingsPanel() {
     slider(t('volume'), 'volume', 0, 100, () => setVolume(settings.volume / 100)),
     slider(t('sensitivity'), 'sensitivity', 25, 250),
     toggle(t('names'), settings.names, () => { settings.names = !settings.names; saveSettings(); }),
+    toggle(t('lite'), settings.lite, () => { settings.lite = !settings.lite; saveSettings(); }),
     toggle(t('fullscreen'), !!document.fullscreenElement, () => {
       if (document.fullscreenElement) document.exitFullscreen(); else document.documentElement.requestFullscreen().catch(() => {});
     }));

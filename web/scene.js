@@ -538,6 +538,7 @@ export class View {
     this.turning = []; this.arcs = []; this.gusts = []; this.floating = []; this.bouncing = []; this.swimming = [];
     this.center = new THREE.Vector3(); // of the course, with its radius: what a camera has to frame
     this.radius = 10;
+    this.lite = false;      // lighter graphics (setLite)
     this.makeArrow();
     if (!size) addEventListener('resize', () => this.resize());
     this.resize();
@@ -545,16 +546,27 @@ export class View {
 
   resize() {
     const [w, h] = this.size ?? [innerWidth, innerHeight];
-    this.renderer.setPixelRatio(this.size ? 1 : Math.min(devicePixelRatio, 2));
+    // past 1.5 pixels of the picture per point, a sharp screen shows no more (with the antialiasing) and
+    // the picture costs nearly twice as much to draw
+    this.renderer.setPixelRatio(this.size ? 1 : Math.min(devicePixelRatio, this.lite ? 1 : 1.5));
     this.renderer.setSize(w, h, false);
     this.camera.aspect = w / h;
     this.camera.updateProjectionMatrix();
   }
 
+  // setLite asks for lighter graphics, for a modest machine, or the full ones: lighter, nothing casts a
+  // shadow (the balls keep theirs on the ground), and a sharp screen gets a pixel of the picture per
+  // point, not per pixel.
+  setLite(lite) {
+    this.lite = lite;
+    this.sun.castShadow = !lite; // (the materials are made again without the shadows, or with them)
+    this.resize();
+  }
+
   setHole(hole) {
     if (this.course) {
       this.scene.remove(this.course);
-      this.course.traverse(o => { if (!o.userData.kit) o.geometry?.dispose(); if (o.userData.own) { o.material.map?.dispose(); o.material.dispose(); } });
+      this.course.traverse(o => { if (!o.userData.kit) o.geometry?.dispose(); if (o.userData.own) { o.material.map?.dispose(); o.material.userData.shore?.dispose(); o.material.dispose(); } });
     }
     this.moving = [];
     this.spinning = []; // { o, y, phase }: the props that turn and float (tokens, keys)
@@ -808,7 +820,7 @@ export class View {
       const water = z.type === 'hazard'; // alive (waterOf), its foam for a rim
       const map = water ? null : look.map.clone(); // its own, to run at its own pace
       const top = new THREE.Mesh(water ? shape(0) : decal(shape(0), look, TILE * (look.scale ?? 1)),
-        water ? waterOf(z, this.hole.zones) : toon(0xffffff, { map, polygonOffset: true, polygonOffsetFactor: -2, polygonOffsetUnits: -4 }));
+        water ? waterOf(z, this.hole.zones, this.renderer) : toon(0xffffff, { map, polygonOffset: true, polygonOffsetFactor: -2, polygonOffsetUnits: -4 }));
       top.userData.own = true;
       top.position.y = floor + 0.012; // the zones of the maps start on the ground
       if (look.run && !water) this.scrolling.push({ texture: map, speed: look.run });
@@ -1607,23 +1619,17 @@ function skirt(colliders, bottom, faces = [MAT.side, MAT.earth, MAT.rock]) {
   return new THREE.Mesh(geometry, faces);
 }
 
-// WATER is a hazard's pool, alive: shallow and light along its shores, deep in the middle, slow swells,
-// a few crests running across, and foam lapping at every shore (not where it goes on into another
-// pool). Noise in course units: never the same twice. Each pool has its own (waterOf), with the shared
-// clock.
-const WATER = new THREE.ShaderMaterial({
+// SHORE draws how far from a shore each point of a pool is, in course units (up to SHORE_FAR: further,
+// the water is deep whatever drifts), a sample every SHORE_STEP, the first and last ones on its edges.
+const SHORE_FAR = 1.5, SHORE_STEP = 0.05;
+const SHORE = new THREE.Mesh(new THREE.PlaneGeometry(2, 2), new THREE.ShaderMaterial({
   uniforms: {
-    time: { value: 0 }, box: { value: new THREE.Vector4(0, 0, 1, 1) }, round: { value: 0 },
-    others: { value: Array.from({ length: 16 }, () => new THREE.Vector4(1e4, 1e4, 1e4, 1e4)) },
-    deep: { value: new THREE.Color('#1b6db5') }, mid: { value: new THREE.Color('#3ba6de') }, light: { value: new THREE.Color('#d6f3ff') }, foam: { value: new THREE.Color('#ffffff') },
+    box: { value: new THREE.Vector4(0, 0, 1, 1) }, round: { value: 0 }, area: { value: new THREE.Vector4(0, 0, 1, 1) }, cells: { value: new THREE.Vector2(2, 2) },
+    others: { value: Array.from({ length: 16 }, () => new THREE.Vector4()) },
   },
-  polygonOffset: true, polygonOffsetFactor: -2, polygonOffsetUnits: -4,
-  vertexShader: 'varying vec2 w; void main() { vec4 p = modelMatrix * vec4(position, 1.0); w = p.xz; gl_Position = projectionMatrix * viewMatrix * p; }',
-  fragmentShader: `uniform float time, round; uniform vec4 box; uniform vec4 others[16]; uniform vec3 deep, mid, light, foam; varying vec2 w;
-float h(vec2 p) { return fract(sin(dot(p, vec2(127.1, 311.7))) * 43758.5453); }
-float n(vec2 p) { vec2 i = floor(p), f = fract(p); f = f * f * (3.0 - 2.0 * f);
-  return mix(mix(h(i), h(i + vec2(1.0, 0.0)), f.x), mix(h(i + vec2(0.0, 1.0)), h(i + vec2(1.0, 1.0)), f.x), f.y); }
-float fbm(vec2 p) { return 0.55 * n(p) + 0.3 * n(p * 2.1 + 7.3) + 0.15 * n(p * 4.3 + 1.7); }
+  vertexShader: 'void main() { gl_Position = vec4(position.xy, 0.0, 1.0); }',
+  fragmentShader: `uniform float round; uniform vec4 box, area; uniform vec2 cells; uniform vec4 others[16];
+vec2 w;
 bool wet(vec2 p) { // another pool there: the water goes on, no shore
   for (int i = 0; i < 16; i++) if (p.x > others[i].x && p.y > others[i].y && p.x < others[i].z && p.y < others[i].w) return true;
   return false;
@@ -1654,7 +1660,32 @@ float shore() { // how far from a shore, in course units
   return d;
 }
 void main() {
-  float d = shore(), drift = fbm(w * 0.3 + vec2(time * 0.04, time * 0.03));
+  w = mix(area.xy, area.zw, (gl_FragCoord.xy - 0.5) / (cells - 1.0));
+  gl_FragColor = vec4(clamp(shore() / ${SHORE_FAR.toFixed(1)}, 0.0, 1.0), 0.0, 0.0, 1.0);
+}`,
+}));
+SHORE.frustumCulled = false;
+const SHORE_VIEW = new THREE.Camera(); // (the quad is drawn as it is, over the whole texture)
+// WATER is a hazard's pool, alive: shallow and light along its shores, deep in the middle, slow swells,
+// a few crests running across, and foam lapping at every shore (not where it goes on into another
+// pool). Noise in course units: never the same twice. Each pool has its own (waterOf), with the shared
+// clock, and its distance to the shore drawn once into a texture (SHORE): searched for at every pixel,
+// every frame, it cost more than all the rest of the picture.
+const WATER = new THREE.ShaderMaterial({
+  uniforms: {
+    time: { value: 0 }, shore: { value: null }, area: { value: new THREE.Vector4(0, 0, 1, 1) }, cells: { value: new THREE.Vector2(2, 2) },
+    deep: { value: new THREE.Color('#1b6db5') }, mid: { value: new THREE.Color('#3ba6de') }, light: { value: new THREE.Color('#d6f3ff') }, foam: { value: new THREE.Color('#ffffff') },
+  },
+  polygonOffset: true, polygonOffsetFactor: -2, polygonOffsetUnits: -4,
+  vertexShader: 'varying vec2 w; void main() { vec4 p = modelMatrix * vec4(position, 1.0); w = p.xz; gl_Position = projectionMatrix * viewMatrix * p; }',
+  fragmentShader: `uniform float time; uniform sampler2D shore; uniform vec4 area; uniform vec2 cells; uniform vec3 deep, mid, light, foam; varying vec2 w;
+float h(vec2 p) { return fract(sin(dot(p, vec2(127.1, 311.7))) * 43758.5453); }
+float n(vec2 p) { vec2 i = floor(p), f = fract(p); f = f * f * (3.0 - 2.0 * f);
+  return mix(mix(h(i), h(i + vec2(1.0, 0.0)), f.x), mix(h(i + vec2(0.0, 1.0)), h(i + vec2(1.0, 1.0)), f.x), f.y); }
+float fbm(vec2 p) { return 0.55 * n(p) + 0.3 * n(p * 2.1 + 7.3) + 0.15 * n(p * 4.3 + 1.7); }
+void main() {
+  vec2 at = (w - area.xy) / (area.zw - area.xy) * (cells - 1.0) + 0.5; // the samples are on the edges of the area
+  float d = texture2D(shore, at / cells).r * ${SHORE_FAR.toFixed(1)}, drift = fbm(w * 0.3 + vec2(time * 0.04, time * 0.03));
   vec3 c = mix(mid, deep, smoothstep(0.1, 1.2, d + (drift - 0.5) * 0.6)); // shallow along the shore only
   c *= 0.95 + 0.1 * smoothstep(0.45, 0.8, fbm(w * 0.45 + vec2(-time * 0.05, time * 0.04))); // slow swells
   float s = n(w * 5.0 + vec2(time * 0.6, time * 0.2)) * n(w * 4.3 - vec2(time * 0.3, -time * 0.5));
@@ -1666,17 +1697,30 @@ void main() {
   #include <colorspace_fragment>
 }`,
 });
-// waterOf gives the water of the pool of hazard zone z (its outline, the pools around it), among zones.
-function waterOf(z, zones) {
+// waterOf gives the water of the pool of hazard zone z (its outline, the pools around it), among zones,
+// its shore drawn by renderer. Its texture goes with it (userData.shore).
+function waterOf(z, zones, renderer) {
   const m = WATER.clone();
   m.uniforms.time = WATER.uniforms.time; // one clock for every pool
   const rect = o => o.shape === BOX ? [o.c[0] - o.h[0], o.c[2] - o.h[2], o.c[0] + o.h[0], o.c[2] + o.h[2]] : [o.c[0] - o.r, o.c[2] - o.r, o.c[0] + o.r, o.c[2] + o.r];
-  if (z.shape === BOX) m.uniforms.box.value.set(...rect(z));
-  else { m.uniforms.round.value = 1; m.uniforms.box.value.set(z.c[0], z.c[2], z.r, 0); }
+  const u = SHORE.material.uniforms;
+  if (z.shape === BOX) { u.round.value = 0; u.box.value.set(...rect(z)); }
+  else { u.round.value = 1; u.box.value.set(z.c[0], z.c[2], z.r, 0); }
   const [x0, z0, x1, z1] = rect(z);
   const near = zones.filter(o => o !== z && o.type === 'hazard' && o.shape === BOX).map(rect)
     .filter(([a, b, c, d]) => a < x1 + 0.5 && c > x0 - 0.5 && b < z1 + 0.5 && d > z0 - 0.5).slice(0, 16);
-  near.forEach((r, i) => m.uniforms.others.value[i] = new THREE.Vector4(...r));
+  u.others.value.forEach((v, i) => i < near.length ? v.set(...near[i]) : v.setScalar(1e4));
+  const cells = new THREE.Vector2(...[x1 - x0, z1 - z0].map(s => Math.min(1024, Math.ceil(s / SHORE_STEP) + 1)));
+  const target = new THREE.WebGLRenderTarget(cells.x, cells.y, { format: THREE.RedFormat, depthBuffer: false });
+  u.area.value.set(x0, z0, x1, z1);
+  u.cells.value.copy(cells);
+  renderer.setRenderTarget(target);
+  renderer.render(SHORE, SHORE_VIEW);
+  renderer.setRenderTarget(null);
+  m.uniforms.shore.value = target.texture;
+  m.uniforms.area.value.set(x0, z0, x1, z1);
+  m.uniforms.cells.value.copy(cells);
+  m.userData.shore = target;
   return m;
 }
 

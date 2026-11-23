@@ -146,6 +146,7 @@ const W = {
   'volume': ['Volume', 'Volume'],
   'sensitivity': ['Sensibilité de la caméra', 'Camera sensitivity'],
   'names': ['Noms au-dessus des balles', 'Names above the balls'],
+  'lite': ['Graphismes allégés', 'Lighter graphics'],
   'fullscreen': ['Plein écran', 'Full screen'],
   'ranking': ['Classement', 'Ranking'],
   'ranking.title': [(n, of) => `Classement · trou ${n} sur ${of}`, (n, of) => `Ranking · hole ${n} of ${of}`],

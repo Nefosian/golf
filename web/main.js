@@ -232,6 +232,7 @@ function frame() {
       return p ? nameOf(p) : null;
     });
   hud.frame();
+  if (view.lite !== hud.settings.lite) view.setLite(hud.settings.lite);
 
   // the camera follows our ball while we play the hole, and shows the whole course otherwise
   const b = myBall(), follow = b && playing();
