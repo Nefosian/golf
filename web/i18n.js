@@ -182,6 +182,8 @@ const W = {
   'conveyor': [s => `Tapis roulant ${s}`, s => `Conveyor ${s}`],
   'magnet': [s => `Aimant ${s}`, s => `Magnet ${s}`],
   'repeller': [s => `Répulseur ${s}`, s => `Repeller ${s}`],
+  'gravity': [g => `Apesanteur ${g}`, g => `Low gravity ${g}`],
+  'vortex': ['Trou noir', 'Black hole'],
 };
 
 // t is the text of key in the language, made with args when it says something

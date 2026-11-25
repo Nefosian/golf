@@ -371,6 +371,25 @@ côte à côte sur les premiers aperçus.
 5. `chateau` : créneaux et tourelles. `bocage` : la haie arrondie, après avoir jugé sa lisibilité
    sur un aperçu. `ville` : brique et couvertine.
 
+## 7 bis. Les thèmes de fête (2026-11-25)
+
+Quatre thèmes de plus, pour des trous plus festifs. Ils gardent les règles d'ici (ce qui joue garde
+ses couleurs, l'herbe reste verte, le décor sous la ligne du regard) et ajoutent ce que les sept
+autres n'avaient pas : des props faits dans `web/scene.js` (`craft` : formes simples, couleurs de
+`PALETTE`, trait d'encre de chaque pièce), un repère au loin à la place du moulin (`landmark`), ce qui
+vole à la place des montgolfières (`flyer`), ce qui tombe (`fall` : neige ou confettis, pas en
+graphismes allégés), une nébuleuse (`nebula`), l'aspect du sable (`sand`) et ce qui nage dans l'eau
+(`swimmer`).
+
+| Thème | Fond, ciel | Murs | Décor | Particularités |
+| --- | --- | --- | --- | --- |
+| `fete` | rose, horizon doré | rayures rouge foncé et crème, rangée d'ampoules allumées | sucettes, cadeaux, arbres en fleurs ; grande roue qui tourne et chapiteau au loin | confettis ; le rouge des murs est plus sombre que le rose des bumpers |
+| `ferme` | ciel clair sur prairie | planches de grange rouges, lisse blanche | bottes de foin, tournesols ; grange et moulin au loin | le sable est de la boue ; des canards nagent dans les mares |
+| `galaxie` | espace noir, nébuleuse violette et bleue, étoiles | panneaux de coque, ligne de néon cyan | rochers lilas et cristaux ; planètes à anneaux, soucoupes volantes ; astéroïdes là où la balle se perd | herbe vert d'eau ; une zone `gravity` est un voile étoilé translucide |
+| `noel` | ciel d'hiver, horizon blanc | sucre d'orge (rayures rouges en biais), crête de neige | sapins décorés, cadeaux, sucres d'orge, bonshommes de neige ; grand sapin au loin | neige qui tombe ; le sable est de la neige poudreuse (blanche à creux lilas, la glace reste bleue et striée) |
+
+Contrôlé sur des captures en perspective (1280 × 800) de chaque trou, puis en jeu dans Edge.
+
 ## 8. Écartés
 
 - **Kermesse** (rayures, fanions, couleurs vives) : toutes les teintes saturées sont prises par le

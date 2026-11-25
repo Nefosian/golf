@@ -2,7 +2,7 @@
 
 Minigolf multijoueur dans le navigateur. Ce dépôt est la **base propre** du jeu, réduite à
 l'essentiel : un serveur Go optimisé, le moteur physique et ses modificateurs (pads, bumpers,
-téléporteurs, zones, obstacles mobiles…), un pool de 20 trous (« Le pool de trous »), un client
+téléporteurs, zones, obstacles mobiles…), un pool de 32 trous (« Le pool de trous »), un client
 avec ses écrans d'avant-partie (accueil, salles, salon) et une vue 3D minimale.
 
 Le prototype d'origine (Node) et la première version Go complète (63 cartes, client Three.js)
@@ -337,7 +337,8 @@ d'Euler XYZ en radians. Facultatifs :
 
 - `material` : `grass`, `wall`, `post` (ceux par défaut, selon `kind`), `ice` (glisse),
   `sand` (freine fort, et une balle qui y tombe ne rebondit pas), `bumper` (renvoie la balle à 9 u/s
-  quelle que soit sa vitesse). L'eau n'est pas un sol : c'est une zone `hazard`. Un bord est un mur classique ou un
+  quelle que soit sa vitesse), `jelly` (une gelée, un château gonflable : une balle qui y tombe rebondit
+  haut, 0,82 de sa vitesse, et y roule lentement). L'eau n'est pas un sol : c'est une zone `hazard`. Un bord est un mur classique ou un
   bumper. La table est dans `internal/physics/material.go` ;
 - `key` (1 à 8) : une porte, que traversent les balles qui ont cette clé ;
 - `motion` : le collider bouge sans fin, selon l'heure du trou et rien d'autre. Avec
@@ -351,7 +352,7 @@ et `once` pour n'agir qu'une fois par balle et par trou. 64 zones au plus par tr
 
 | `type` | `params` | Effet |
 | --- | --- | --- |
-| `speedpad` | `dir`, `speed` | vitesse horizontale imposée dans le sens de `dir` |
+| `speedpad` | `dir`, `speed` | un accélérateur : la balle garde sa direction et repart à `speed` au moins, ou à 1,2 fois sa vitesse si elle allait déjà plus vite (24 au plus). Seule une balle qui va dans le sens de `dir` (à 60° près) est relancée : une balle en travers ou à contre-sens passe sans rien, sinon un accélérateur entre deux murs la renverrait sans fin. Une balle presque immobile au sol (qui tombe dessus) part dans le sens de `dir` |
 | `jumppad` | `speed` | vitesse verticale |
 | `launcher` | `v` | vitesse imposée : canon, catapulte (le chemin envoyé montre l'arc) |
 | `teleport` | `to`, `turn` | la balle sort en `to` à la même vitesse, tournée de `turn` radians |
@@ -361,11 +362,14 @@ et `once` pour n'agir qu'une fois par balle et par trou. 64 zones au plus par tr
 | `key` | `key` | donne une clé (voir les portes) |
 | `wind` | `accel` | poussée continue : vent, ventilateur ; une zone fine (0,3 de haut au plus) est un tapis roulant |
 | `magnet` | `at`, `accel` | attire (ou repousse) horizontalement vers `at` |
+| `gravity` | `g` | la gravité devient `g` dans la zone (1,6 à 54) : un saut y flotte et va plus loin, une pente y tire moins. Une zone haute au-dessus d'un vide fait un pont d'apesanteur |
+| `vortex` | `at`, `accel`, `swirl` | un trou noir, un tourbillon : attire vers `at` comme un aimant et fait tourner la balle autour (`swirl` > 0 : sens inverse des aiguilles d'une montre vu de dessus). Plus fort que la résistance au roulement, il doit avoir le trou en son centre ; son `swirl` sous 2,2 garantit qu'une balle ne tourne pas sans fin |
 
 Toute vitesse reste sous 24 u/s, toute poussée sous 40 u/s². Une poussée plus faible que la
 résistance au roulement (2,2 u/s² sur l'herbe) ne fait pas repartir une balle arrêtée.
 
-**Le pool de trous** : 20 trous, `maps/p01-*.json` à `maps/p20-*.json`, conçus pour 3 à 9 joueurs qui
+**Le pool de trous** : 32 trous, `maps/p01-*.json` à `maps/p32-*.json` (p21 à p32 : les trous à thème festif, ferme,
+galactique et de Noël, voir « Les trous festifs » dans `docs/parcours-v2.md`), conçus pour 3 à 9 joueurs qui
 tirent en même temps (les balles se cognent). Leurs idées (le niveau, la vedette, la ligne sûre et la
 ligne risquée, ce que le jeu à plusieurs y crée) et leurs mesures sont dans `docs/parcours-v2.md`, les
 règles qui les guident dans `docs/recherche-parcours.md`. Les 75 trous d'avant (et
@@ -389,7 +393,12 @@ règles qui les guident dans `docs/recherche-parcours.md`. Les 75 trous d'avant 
 son habillage : `bocage` (haies taillées, le défaut), `ville` (brique, ciel rose), `quai` (planches,
 la mer sous le parcours), `canyon` (strates de roche), `chateau` (pierre, créneaux, brume),
 `banquise` (rondins, crête de neige, mer sombre et glaçons), `nuit` (ciel étoilé, guirlandes
-d'ampoules). Ce qui joue garde ses couleurs partout. Le choix des couleurs, les contrôles de
+d'ampoules), et quatre thèmes de fête, chacun avec ses props faits dans `web/scene.js` (`craft`) :
+`fete` (fête foraine : rayures de baraque, ampoules, grande roue qui tourne, chapiteau, sucettes,
+confettis qui tombent), `ferme` (planches de grange, bottes de foin, tournesols, grange, la boue pour
+le sable, des canards dans les mares), `galaxie` (espace : nébuleuse, néons, cristaux, astéroïdes,
+planètes à anneaux, soucoupes volantes), `noel` (murs sucre d'orge, sapins décorés, cadeaux,
+bonshommes de neige, neige poudreuse pour le sable, neige qui tombe ; pas en graphismes allégés). Ce qui joue garde ses couleurs partout. Le choix des couleurs, les contrôles de
 lisibilité et le thème de chaque trou sont dans `docs/themes.md` ; le code dans `THEMES`, `SIDE`,
 `CROWN` et `dress()` de `web/scene.js`. Le serveur refuse un thème inconnu.
 
@@ -402,7 +411,8 @@ aspect (`LOOK`, `GROUND` et `zoneProps` dans `web/scene.js`, les modèles dans �
 
 | Quoi | Ce qu'on voit |
 | --- | --- |
-| `ice`, `sand` | glace bleu pâle à reflets doux et fines fissures ; sable à gros pois |
+| `ice`, `sand` | glace bleu pâle à reflets doux et fines fissures ; sable à gros pois (boue brune à la ferme, neige poudreuse blanche à Noël) |
+| `jelly` | gelée lilas, brillante, à bulles |
 | `speedpad` | plaque orange à gros chevrons qui défilent dans le sens de la poussée, d'autant plus vite qu'elle pousse fort |
 | `jumppad` | un plateau sur ressorts de la taille de la zone, qui rebondit sans cesse |
 | `launcher` | un canon sur son affût, sa culasse au milieu de la zone, sa bouche dans le sens et à l'angle du tir ; après la bouche, l'arc en pointillés qui volent |
@@ -413,6 +423,8 @@ aspect (`LOOK`, `GROUND` et `zoneProps` dans `web/scene.js`, les modèles dans �
 | `key` | la clé, qui flotte et tourne, son ombre au sol, rien d'autre |
 | `wind` | une rangée de ventilateurs au bord d'où il vient, à la hauteur de la zone, et des traits de vent qui la traversent ; une zone fine (0,3 de haut au plus) est un tapis roulant qui défile |
 | `magnet` | plaque d'acier à anneaux rouges qui courent vers le centre (aimant) ou bleu marine qui en partent (répulseur) |
+| `gravity` | un voile indigo étoilé, translucide et sans contour (au-dessus d'un vide, il ne doit pas passer pour un sol), des étoiles qui montent lentement dans toute sa hauteur |
+| `vortex` | un disque d'accrétion orange et rose autour d'un cœur noir, qui tourne dans le sens où il fait tourner la balle |
 
 L'herbe est tondue en larges bandes dans l'axe du trou, un peu inégale, plus claire en hauteur et plus sombre dans les creux ; une pente tournée vers le soleil s'éclaire, une pente à l'ombre s'assombrit : le relief se lit sans trait. Le soleil projette des ombres (murs, objets, balles). Chaque zone au sol est un autocollant cerné d'encre. Le jaune rayé d'encre est réservé à ce qui
 bouge : les obstacles mobiles. Une porte prend la couleur de sa clé (`KEY_COLOR` : bleu, puis vermillon ; à partir de la

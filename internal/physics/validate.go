@@ -258,6 +258,15 @@ func (h *Hole) validate() error {
 				return fmt.Errorf("zone %d magnet: one stronger than the rolling resistance there (%.2f) pulls into the cup, or a ball circles it for ever", i, rollDecel*fric)
 			}
 		}
+		if v, ok := z.fielder.(*vortex); ok {
+			fric := 1.0
+			if f, _, _ := h.floorUnder(v.At.X, v.At.Z, z.span().y1); f >= 0 {
+				fric = h.Colliders[f].surf.friction
+			}
+			if math.Hypot(v.Accel, v.Swirl) > rollDecel*fric && math.Hypot(v.At.X-cup.X, v.At.Z-cup.Z) >= cup.R {
+				return fmt.Errorf("zone %d vortex: one stronger than the rolling resistance there (%.2f) swallows into the cup, or a ball circles it for ever", i, rollDecel*fric)
+			}
+		}
 	}
 	for k := range gates {
 		if !keys[k] {

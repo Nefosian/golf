@@ -146,6 +146,33 @@ coup. À plusieurs : tous les boulets tombent dans la même cuvette.
 tremplin), le green en bas dans une cuvette. Sûre : freiner sur les paliers. Risquée : tout d'un trait.
 À plusieurs : l'arrivée commune.
 
+## Les trous festifs (p21 à p32, 2026-11-25)
+
+Douze trous de plus, trois par thème nouveau (`fete`, `ferme`, `galaxie`, `noel`), qui montrent les
+éléments ajoutés le même jour : l'accélérateur qui garde la direction de la balle, la gelée qui fait
+rebondir (`jelly`), la zone de faible gravité (`gravity`), le trou noir (`vortex`), et la gravité
+d'un trou entier (La Lune). Tous acceptés par `tools/verify`. « Au mieux » : ce que `tools/verify`
+trouve ; « as » : la part de 6 840 tirs du départ (360 angles × 19 forces) qui finissent dans le trou.
+
+| Trou | Thème, par | La vedette | Sûr / risqué | Au mieux | As |
+| --- | --- | --- | --- | --- | --- |
+| p21 La Fête Foraine | fete, 3 | un manège (barre qui tourne), deux accélérateurs, bumpers et lance-pierres devant le trou | autour du manège / un accélérateur visé droit au trou | 2 | 0 % |
+| p22 Le Château Gonflable | fete, 3 | un rebord au-dessus d'un sol de gelée barré de deux haies en chicane | la rampe à l'est / sauter du rebord, rebondir par-dessus les haies | 1 | 0,1 % |
+| p23 La Grande Roue | fete, 3 | deux barres croisées qui tournent au milieu d'un disque, bumpers, accélérateurs | attendre le passage / par un accélérateur sur le côté | 1 | 0,01 % |
+| p24 Le Champ de Taupes | ferme, 3 | trois rangées de taupes en quinconce, bottes de foin, tapis à grain, boue devant le green | le tapis à grain / à travers les taupes | 1 | 0 % |
+| p25 La Colline | ferme, 3 | une colline (montée, sommet sans mur à l'est avec un moulin, descente), boue au pied | trop doux, la balle revient ; trop fort, le vide ou la boue | 2 | 0 % |
+| p26 La Mare aux Canards | ferme, 3 | une mare, un ponton sans rambarde où passe un canard (il pousse à l'eau), deux îlots | le tour de la mare / le ponton | 2 | 0 % |
+| p27 La Lune | galaxie, 3 | gravité 6 : un tremplin au-dessus d'un ravin, le trou au fond d'un cratère | le long chemin à l'est, un météore / le saut | 1 | 0 % |
+| p28 Le Trou Noir | galaxie, 2 | un vortex autour du trou (attire 3,5, fait tourner 1,6), deux comètes | viser de biais pour que le tourbillon ramène la balle | 1 | 2,5 % |
+| p29 La Station Orbitale | galaxie, 3 | tremplin et 10 de vide traversés dans une zone de gravité 6 | le trou de ver vers une baie, puis un couloir à accélérateur / le saut | 2 | 0,1 % |
+| p30 La Descente en Luge | noel, 3 | une piste de glace de 6 de haut, deux virages en épingle, neige poudreuse devant le green | doser : sur la glace la balle garde sa vitesse | 1 | 0 % |
+| p31 Le Lac Gelé | noel, 3 | une rampe de glace, un lac gelé troué de deux trous d'eau, bancs de neige, traîneau | doux, le long des bancs de neige / tout droit | 2 | 0 % |
+| p32 L'Atelier du Père Noël | noel, 3 | un tapis roulant où passent des cadeaux, la porte du traîneau et sa clé, la cheminée (canon) | la clé puis la porte / la cheminée | 3 | 0 % |
+
+Ce que la vérification a fait changer : sur Le Trou Noir, un tourbillon plus fort que la résistance au
+roulement gardait une balle en orbite autour du trou jusqu'au filet de 30 s (d'où `swirl` 1,6) ; sur
+Le Lac Gelé, une balle tirée fort glissait plus de 30 s sur la glace (d'où les bancs de neige).
+
 ## Ce qu'il faut après
 
 - **Le tirage par niveaux** (serveur) : chaque trou porte son niveau ; une partie de 9 suit un gabarit

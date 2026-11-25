@@ -243,6 +243,18 @@ function pieces(t) {
       h.zones.push({ type: 'jumppad', shape: 1, c: V(x, y + 1, z), r, hh: 1, params: { speed } });
       return t;
     },
+    // lowgrav is a field of gravity g over the box (x0, z0)-(x1, z1), from the floor at y up high: a
+    // jump in it floats, a slope in it pulls less
+    lowgrav(x0, z0, x1, z1, y, g, high = 3) {
+      h.zones.push({ type: 'gravity', shape: 0, c: V((x0 + x1) / 2, y + high / 2, (z0 + z1) / 2), h: V(Math.abs(x1 - x0) / 2, high / 2, Math.abs(z1 - z0) / 2), params: { g } });
+      return t;
+    },
+    // vortex is a black hole of radius r round (x, z) on the floor at y: it pulls a ball in (accel) and
+    // turns it round (swirl: counterclockwise seen from above when positive)
+    vortex(x, z, r, y, { accel = 3, swirl = 2 } = {}) {
+      h.zones.push({ type: 'vortex', shape: 1, c: V(x, y + 0.25, z), r, hh: 0.25, params: { at: V(x, y, z), accel, swirl } });
+      return t;
+    },
     // cannon fires a ball that rolls onto it (a pad of radius r on the floor at y, at x, z) so that it
     // comes down on the floor at 'at' ([x, y, z]) T seconds later
     cannon(x, z, y, at, { T = 1.6, r = 0.6 } = {}) {

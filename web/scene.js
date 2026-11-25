@@ -17,6 +17,8 @@ const PALETTE = {
   violet: 0x8b5cf6, violet2: 0x5b3fd6, leaf: 0x38aa6c, leaf2: 0x2f9e63, wood: 0xb07a4f, steel: 0x8e9aa8, dark: 0x2b3a36,
   white: 0xffffff, cloud: 0xffffff, tint: 0xffffff, stone: 0xa9b4c2, earth: 0xb07a4f, earth2: 0x8a5a3c, gold: 0xffc93c, water: 0x3db8e8,
   grass: 0x6fd36a, lip: 0x3fae5a, post: 0xfff7e6, sky: 0x5cc4e8, horizon: 0xfff2d6, below: 0x8fd0e8,
+  // the props made here (craft, below) for the themes fete, ferme, galaxie and noel
+  hay: 0xf2c94c, hay2: 0xd9a930, barn: 0xc6412f, pine: 0x1f7a4c, pine2: 0x175f3d, neon: 0x4df3ff, space: 0x3b2f7a, snow: 0xf4fbff, carrot: 0xff7a1f,
 };
 // toon shading: three flat tones (shade, middle, light); pale things get a softer ramp, or their
 // shade turns to dirty grey
@@ -124,6 +126,77 @@ function inkShell(object, t) {
   shell.name = 'ink';
   return shell;
 }
+// ---------------------------------------------------------------------------- crafted props
+// The props of the themes fete, ferme, galaxie and noel are made here from simple shapes, in the
+// style of the kit: flat toon colours of PALETTE (so that a theme can recolour them), an ink outline
+// round each piece. Each is modelled at the size the decor shows it, its origin on the ground.
+const PI2 = Math.PI * 2; // (TAU comes later in the file)
+const part = (geometry, key) => new THREE.Mesh(geometry, PROP_MAT[key]);
+// inked: a piece with its outline (the same shell the kit's props get)
+const inked = (geometry, key, t = 0.03) => { const m = part(geometry, key); m.add(inkShell(m, t)); return m; };
+function craft(name, ...pieces) {
+  const o = new THREE.Group();
+  o.name = name;
+  for (const p of pieces.flat()) o.add(p);
+  o.traverse(m => { if (m.isMesh) m.userData.kit = true; });
+  KIT[name] = o;
+  return o;
+}
+const ring = (n, f) => Array.from({ length: n }, (_, i) => f(i * PI2 / n, i));
+{
+  const C = (r0, r1, h, n = 16, a0 = 0, a = PI2) => new THREE.CylinderGeometry(r0, r1, h, n, 1, false, a0, a);
+  const S = (r, w = 16, h = 10) => new THREE.SphereGeometry(r, w, h);
+  const B = (x, y, z) => new THREE.BoxGeometry(x, y, z);
+  // ferme: a round bale of hay on its side, a sunflower, a red barn with its white door
+  craft('hay', inked(C(0.42, 0.42, 0.7, 20).rotateZ(Math.PI / 2).translate(0, 0.42, 0), 'hay'),
+    ...[-0.2, 0.2].map(x => part(C(0.425, 0.425, 0.05, 20).rotateZ(Math.PI / 2).translate(x, 0.42, 0), 'hay2')));
+  craft('sunflower', inked(C(0.04, 0.05, 1.1, 6).translate(0, 0.55, 0), 'leaf', 0.02),
+    inked(new THREE.SphereGeometry(0.16, 10, 6).scale(1.4, 0.4, 0.7).translate(0.15, 0.55, 0), 'leaf', 0.02),
+    inked(C(0.3, 0.3, 0.06, 12).rotateX(Math.PI / 2 - 0.3).translate(0, 1.15, 0.03), 'sun', 0.025),
+    part(C(0.14, 0.14, 0.08, 12).rotateX(Math.PI / 2 - 0.3).translate(0, 1.15, 0.06), 'earth2'));
+  const roof = new THREE.ExtrudeGeometry(new THREE.Shape([new THREE.Vector2(-2.4, 0), new THREE.Vector2(2.4, 0), new THREE.Vector2(0, 1.7)]), { depth: 4.6, bevelEnabled: false }).translate(0, 2.6, -2.3);
+  craft('barn', inked(B(4, 2.6, 4).translate(0, 1.3, 0), 'barn', 0.05), inked(roof, 'dark', 0.05),
+    part(B(1.7, 1.9, 0.06).translate(0, 0.95, 2.02), 'cream'), part(B(1.3, 1.5, 0.08).translate(0, 0.85, 2.03), 'barn'),
+    ...[0.6, -0.6].map(s => part(B(0.12, 2.1, 0.09).rotateZ(s).translate(0, 0.85, 2.05), 'cream')));
+  // fete: a circus tent in red and cream wedges, a lollipop, a big wheel that turns (its ring:
+  // wheel_spin, turned like the windmill's sails)
+  const wedges = (make, n) => ring(n, (a, i) => part(make(a, PI2 / n), i % 2 ? 'cream' : 'red'));
+  craft('tent', ...wedges((a, w) => C(2.4, 2.4, 2, 2, a, w).translate(0, 1, 0), 16), ...wedges((a, w) => new THREE.ConeGeometry(2.7, 2.2, 2, 1, false, a, w).translate(0, 3.1, 0), 16),
+    inkShell(part(C(2.4, 2.4, 2, 32).translate(0, 1, 0), 'red'), 0.05), inkShell(part(new THREE.ConeGeometry(2.7, 2.2, 32).translate(0, 3.1, 0), 'red'), 0.05), // the outline of the whole
+    inked(C(0.04, 0.04, 0.8, 6).translate(0, 4.5, 0), 'dark', 0.02), inked(new THREE.ConeGeometry(0.3, 0.35, 3).rotateZ(-Math.PI / 2).translate(0.2, 4.75, 0), 'sun', 0.02));
+  craft('lollipop', inked(C(0.035, 0.035, 0.9, 6).translate(0, 0.45, 0), 'cream', 0.02), inked(C(0.3, 0.3, 0.1, 20).rotateX(Math.PI / 2).translate(0, 1.15, 0), 'tint', 0.025),
+    part(new THREE.TorusGeometry(0.17, 0.04, 6, 20).translate(0, 1.15, 0.055), 'cream'));
+  const wheel = craft('wheel_spin', inked(new THREE.TorusGeometry(4, 0.13, 8, 48), 'red', 0.05), inked(new THREE.TorusGeometry(1, 0.1, 8, 24), 'red', 0.04),
+    ...ring(8, a => part(B(0.12, 8, 0.12).rotateZ(a), 'cream')),
+    ...ring(8, (a, i) => inked(B(0.8, 0.7, 0.8).translate(Math.cos(a) * 4, Math.sin(a) * 4 - 0.5, 0), ['sun', 'pink', 'mint', 'violet'][i % 4], 0.04)));
+  delete KIT.wheel_spin;
+  wheel.position.y = 5;
+  craft('wheel', ...[-1, 1].map(s => inked(B(0.25, 5.6, 0.25).rotateZ(s * 0.35).translate(s * 0.95, 2.6, -0.7), 'steel', 0.04)),
+    ...[-1, 1].map(s => inked(B(0.25, 5.6, 0.25).rotateZ(s * 0.35).translate(s * 0.95, 2.6, 0.7), 'steel', 0.04)), wheel);
+  // noel: a present with its ribbon, a candy cane, a snowman, a decorated fir with its star
+  craft('gift', inked(B(0.7, 0.6, 0.7).translate(0, 0.3, 0), 'tint', 0.03), part(B(0.72, 0.62, 0.16).translate(0, 0.3, 0), 'cream'), part(B(0.16, 0.62, 0.72).translate(0, 0.3, 0), 'cream'),
+    ...[-1, 1].map(s => inked(new THREE.TorusGeometry(0.1, 0.035, 6, 12).rotateY(s * 0.6).translate(s * 0.09, 0.66, 0), 'cream', 0.015)));
+  craft('cane', ...Array.from({ length: 6 }, (_, i) => part(C(0.075, 0.075, 0.2, 10).translate(0, 0.1 + i * 0.2, 0), i % 2 ? 'cream' : 'red')),
+    inkShell(part(C(0.08, 0.08, 1.2, 10).translate(0, 0.6, 0), 'red'), 0.025), inked(new THREE.TorusGeometry(0.22, 0.075, 8, 14, Math.PI).translate(-0.22, 1.2, 0), 'red', 0.025));
+  craft('snowman', inked(S(0.5).translate(0, 0.45, 0), 'snow', 0.035), inked(S(0.36).translate(0, 1.18, 0), 'snow', 0.03), inked(S(0.26).translate(0, 1.7, 0), 'snow', 0.03),
+    inked(new THREE.ConeGeometry(0.06, 0.3, 8).rotateX(Math.PI / 2).translate(0, 1.7, 0.36), 'carrot', 0.015),
+    inked(C(0.2, 0.2, 0.28, 14).translate(0, 2.05, 0), 'dark', 0.02), inked(C(0.3, 0.3, 0.04, 16).translate(0, 1.92, 0), 'dark', 0.02),
+    ...[-0.09, 0.09].map(x => part(S(0.035, 6, 4).translate(x, 1.78, 0.23), 'ink')), part(new THREE.TorusGeometry(0.33, 0.06, 6, 16).rotateX(Math.PI / 2).translate(0, 1.47, 0), 'red'));
+  craft('xmas_tree', inked(C(0.12, 0.14, 0.5, 8).translate(0, 0.25, 0), 'wood', 0.02),
+    ...[[0.95, 1, 0.9], [0.75, 0.9, 1.45], [0.52, 0.8, 1.95]].map(([r, h, y]) => inked(new THREE.ConeGeometry(r, h, 12).translate(0, y, 0), 'pine', 0.035)),
+    inked(new THREE.OctahedronGeometry(0.18).translate(0, 2.45, 0), 'gold', 0.02),
+    ...[[0.62, 0.75, 0], [0.45, 1.25, 2.1], [0.3, 1.8, 4.2], [0.7, 0.7, 3.3], [0.52, 1.3, 5.4], [0.65, 0.68, 1.3]].map(([r, y, a], i) => inked(S(0.08, 8, 6).translate(Math.cos(a) * r, y, Math.sin(a) * r), ['red', 'sun', 'pink', 'violet'][i % 4], 0.015)));
+  // galaxie: a cluster of crystals, a ringed planet, a flying saucer
+  craft('crystal', ...[[0, 0, 1, 0], [0.28, 0.1, 0.7, 0.4], [-0.25, -0.15, 0.6, -0.35]].map(([x, z, s, lean]) => inked(new THREE.OctahedronGeometry(0.28).scale(1, 2.4, 1).rotateZ(lean).translate(x, 0.55 * s, z).scale(s, s, s), 'tint', 0.025)));
+  craft('planet', inked(S(1, 32, 20), 'tint', 0.03), inked(new THREE.TorusGeometry(1.65, 0.12, 6, 48).scale(1, 1, 0.35).rotateX(Math.PI / 2).rotateZ(0.35), 'cream', 0.025));
+  // ferme: a duck, for the ponds (it swims like the sharks' fins: modelled heading +z)
+  craft('duck', inked(S(0.26, 14, 10).scale(1, 0.75, 1.35).translate(0, 0.1, 0), 'cream', 0.025), inked(S(0.16, 12, 8).translate(0, 0.36, 0.26), 'cream', 0.02),
+    inked(new THREE.ConeGeometry(0.07, 0.16, 8).rotateX(Math.PI / 2).translate(0, 0.34, 0.47), 'carrot', 0.012), inked(new THREE.ConeGeometry(0.1, 0.18, 6).rotateX(-Math.PI / 2 - 0.5).translate(0, 0.22, -0.36), 'cream', 0.015),
+    ...[-0.09, 0.09].map(x => part(S(0.03, 6, 4).translate(x, 0.41, 0.38), 'ink')));
+  craft('ufo', inked(S(1.2, 28, 12).scale(1, 0.26, 1), 'steel', 0.04), inked(new THREE.SphereGeometry(0.55, 20, 10, 0, PI2, 0, Math.PI / 2).translate(0, 0.2, 0), 'mint', 0.03),
+    ...ring(8, a => part(S(0.09, 8, 6).translate(Math.cos(a) * 1.05, -0.02, Math.sin(a) * 1.05), 'sun')));
+}
+
 // the top of each prop over its origin, read from the models (what decor may reach depends on it)
 const TOP = Object.fromEntries(Object.entries(KIT).map(([k, o]) => [k, new THREE.Box3().setFromObject(o).max.y]));
 // what zones show that is not a prop: the dots of a launcher's arc, the streaks of a wind, the
@@ -138,6 +211,7 @@ const BEAM_MAT = new THREE.ShaderMaterial({ // light, fading as it rises
   fragmentShader: 'uniform vec3 color; varying float h; void main() { gl_FragColor = vec4(color, 0.42 * (1.0 - h) * (1.0 - h)); }',
 });
 const SPARK_MAT = new THREE.MeshBasicMaterial({ color: 0xe9ddff });
+const GRAV_MAT = new THREE.MeshBasicMaterial({ color: 0x9ff3ff }); // the stars of a low gravity zone
 // the colours of the teleporters of a hole, in turn, so that a mouth and where it leads match:
 // what is violet in the portal and its shards, the light, the sparkles
 const PORTALS = [
@@ -213,6 +287,18 @@ const LOOK = {
     }
   }),
   // sand: yellow, big soft dots, a few pale ones
+  // mud (ferme): brown, darker puddles, a few pale clods
+  mud: () => tile('mud', (g, n, rand, spread) => {
+    fill(g, n, '#9a6a3f');
+    for (let i = 0; i < 9; i++) { const r = 10 + rand() * 12; spread(rand() * n, rand() * n, r, (x, y) => blob(g, x, y, r, '#7a4f2c')); }
+    for (let i = 0; i < 6; i++) { const r = 4 + rand() * 4; spread(rand() * n, rand() * n, r, (x, y) => blob(g, x, y, r, '#c08a58')); }
+  }),
+  // powder snow (noel): white, soft lilac-grey dimples (ice is blue and streaked)
+  snow: () => tile('snow', (g, n, rand, spread) => {
+    fill(g, n, '#ffffff');
+    for (let i = 0; i < 12; i++) { const r = 7 + rand() * 8; spread(rand() * n, rand() * n, r, (x, y) => blob(g, x, y, r, '#dfe3f3')); }
+    for (let i = 0; i < 8; i++) { const r = 3 + rand() * 3; spread(rand() * n, rand() * n, r, (x, y) => blob(g, x, y, r, '#c4cbe6')); }
+  }),
   sand: () => tile('sand', (g, n, rand, spread) => {
     fill(g, n, '#f7d68c');
     for (let i = 0; i < 10; i++) { const r = 7 + rand() * 7; spread(rand() * n, rand() * n, r, (x, y) => blob(g, x, y, r, '#e6b863')); }
@@ -256,6 +342,31 @@ const LOOK = {
   // a magnet's plate: steel with rings that run in (a magnet) or out (a repeller)
   rings: color => tile('rings ' + color, (g, n) => { fill(g, n, '#c3ccd6'); g.fillStyle = color; g.fillRect(0, n * 0.25, n, n * 0.5); g.fillStyle = '#17332b'; g.fillRect(0, n * 0.25, n, n * 0.06); }),
   checker: () => tile('checker', (g, n) => { fill(g, n, '#fff7e6'); g.fillStyle = '#17332b'; g.fillRect(0, 0, n / 2, n / 2); g.fillRect(n / 2, n / 2, n / 2, n / 2); }),
+  // jelly (a trampoline): glossy lilac, round shines like bubbles in it
+  jelly: () => tile('jelly', (g, n, rand, spread) => {
+    fill(g, n, '#c08cff');
+    for (let i = 0; i < 7; i++) { const r = 16 + rand() * 14; spread(rand() * n, rand() * n, r, (x, y) => { blob(g, x, y, r, '#a56cf2'); blob(g, x - r * 0.3, y - r * 0.3, r * 0.35, '#f1e3ff'); }); }
+  }),
+  // a black hole: an accretion swirl (orange, pink) round a dark heart, drawn whole over the zone; it turns
+  vortex: () => tile('vortex', (g, n) => {
+    const c = n / 2, grad = g.createRadialGradient(c, c, 0, c, c, c);
+    grad.addColorStop(0, '#05030f'); grad.addColorStop(0.25, '#1d0b3d'); grad.addColorStop(0.7, '#5b1f8a'); grad.addColorStop(1, '#ff7ac8');
+    fill(g, n, '#ff7ac8'); g.fillStyle = grad; g.beginPath(); g.arc(c, c, c, 0, TAU); g.fill();
+    g.lineCap = 'round';
+    for (const [color, w, k0] of [['#ffb347', 14, 0], ['#ff5d8f', 10, 0.5]]) for (let k = 0; k < 3; k++) {
+      g.strokeStyle = color; g.lineWidth = w; g.beginPath();
+      for (let s = 0; s <= 40; s++) { const r = c * (0.12 + 0.85 * s / 40), a = (k + k0) * TAU / 3 + s / 40 * 4.2; g.lineTo(c + Math.cos(a) * r, c + Math.sin(a) * r); }
+      g.stroke();
+    }
+    blob(g, c, c, n * 0.07, '#000000');
+  }),
+  // low gravity: deep indigo, little stars, faint rings
+  antigrav: () => tile('antigrav', (g, n, rand, spread) => {
+    fill(g, n, '#2a2366');
+    g.strokeStyle = 'rgba(120,240,255,0.35)'; g.lineWidth = 6;
+    for (const y of [0.25, 0.75]) { g.beginPath(); g.moveTo(0, n * y); g.lineTo(n, n * y); g.stroke(); }
+    for (let i = 0; i < 14; i++) { const r = 2 + rand() * 4, c = rand() < 0.5 ? '#9ff3ff' : '#ffffff'; spread(rand() * n, rand() * n, r, (x, y) => blob(g, x, y, r, c)); }
+  }),
 };
 
 // patternUV gives a geometry texture coordinates in course units, so that a pattern keeps its
@@ -274,22 +385,23 @@ function patternUV(geometry, at) {
 
 // What the colliders are made of, as the maps name it (internal/physics/material.go). Grass, wall
 // and post keep their plain colours.
-const SURFACE = { ice: LOOK.ice, sand: LOOK.sand, bumper: LOOK.bumper };
+const SURFACE = { ice: LOOK.ice, sand: LOOK.sand, bumper: LOOK.bumper, jelly: LOOK.jelly };
 // a post: cream, a red band round it, its top cream (the groups of THREE.CylinderGeometry: side, top, bottom)
 const POST_FACES = [toon(0xffffff, { map: LOOK.post() }), MAT.wall, MAT.wall];
 // the first two are the ones maps use, blue and vermilion: no other element is drawn in them, and both
 // stand out on grass. From the third on, a key shares its colour with something else.
 const KEY_COLOR = ['#3fa7ff', '#ff6b3f', '#8ac926', '#9b5de5', '#2ec4b6', '#f15bb5', '#adb5bd', '#ffc300'];
 const surfaces = new Map();
+let sandLook = 'sand'; // how the hole drawn shows sand: its theme's (setHole)
 function surface(c) {
-  const name = c.key ? `key ${c.key}` : c.motion ? `moving ${c.material ?? ''}` : c.material;
+  const name = c.key ? `key ${c.key}` : c.motion ? `moving ${c.material ?? ''}` : c.material === 'sand' ? sandLook : c.material;
   if (!name || name === 'grass' || name === 'wall' || name === 'post') return null;
   if (!surfaces.has(name)) {
     surfaces.set(name, c.key
       ? toon(0xffffff, { map: LOOK.gate(c.key), transparent: true, opacity: 0.85 }) // a gate, in the colour of its key
       : c.motion && !SURFACE[c.material]
         ? toon(0xffffff, { map: LOOK.tape() }) // what moves stands out
-        : toon(0xffffff, { map: SURFACE[c.material]?.() ?? LOOK.tape() }));
+        : toon(0xffffff, { map: (c.material === 'sand' ? LOOK[sandLook] : SURFACE[c.material])?.() ?? LOOK.tape() }));
   }
   return surfaces.get(name);
 }
@@ -340,6 +452,21 @@ const SIDE = {
     }
   }),
   post: (base, band) => tile('post ' + base + band, (g, n) => { fill(g, n, base); g.fillStyle = band; g.fillRect(0, n * 0.3, n, n * 0.4); }),
+  // a fairground booth: broad upright stripes, in turn
+  stripes: (...colors) => tile('stripes ' + colors.join(), (g, n) => { colors.forEach((c, i) => { g.fillStyle = c; g.fillRect(i * n / colors.length, 0, n / colors.length, n); }); }),
+  // a candy cane: slanted red stripes on cream
+  cane: (base, stripe) => tile('cane ' + base + stripe, (g, n) => {
+    fill(g, n, base); g.fillStyle = stripe;
+    for (let i = -2; i < 3; i++) { g.beginPath(); g.moveTo(i * n / 2, n); g.lineTo(i * n / 2 + n / 5, n); g.lineTo(i * n / 2 + n / 5 + n, 0); g.lineTo(i * n / 2 + n, 0); g.fill(); }
+  }),
+  // a spaceship's hull: dark panels, their seams, a line of light along the middle
+  panels: (base, seam, light) => tile('panels ' + base, (g, n) => {
+    fill(g, n, base); g.fillStyle = seam;
+    for (let i = 0; i < 2; i++) g.fillRect(i * n / 2, 0, 5, n);
+    g.fillRect(0, n * 0.2, n, 4); g.fillRect(0, n * 0.8, n, 4);
+    g.fillStyle = light; g.fillRect(0, n * 0.47, n, 14);
+    for (const x of [0.25, 0.75]) blob(g, n * x, n * 0.32, 6, seam);
+  }),
 };
 // what crowns a plain wall (half-height 0.5 at most: borders and rails) or a post: never more than 0.10
 // over it nor 0.03 out of its sides (balls fly over walls: the drawing must not lie). A wall's crown
@@ -354,6 +481,10 @@ const CROWN = {
   chateau: { rail: { piece: w => new THREE.BoxGeometry(0.3, 0.1, w).translate(0, 0.05, 0), step: 0.6 }, post: r => new THREE.ConeGeometry(r + 0.03, Math.min(0.4 * r, 0.1), 24).translate(0, Math.min(0.4 * r, 0.1) / 2, 0) },
   banquise: { rail: { rod: 0.08, r: w => Math.min(0.11, w / 2 + 0.03) }, post: r => dome(r, 0.1) },
   nuit: { rail: { piece: () => dome(0.09, 0.09), step: 0.6 }, post: r => dome(r, 0.08), glow: true },
+  fete: { rail: { piece: () => dome(0.085, 0.085), step: 0.45 }, post: r => new THREE.ConeGeometry(r + 0.03, 0.1, 24).translate(0, 0.05, 0), glow: true }, // a row of bulbs, a bulb roof on a post
+  ferme: { rail: { slab: 0.06 }, post: r => dome(r, 0.08) },
+  galaxie: { rail: { rod: 0.05, r: () => 0.06 }, post: r => dome(r * 0.7, 0.08), glow: true }, // a line of neon
+  noel: { rail: { rod: 0.1, r: w => Math.min(0.12, w / 2 + 0.03) }, post: r => dome(r + 0.02, 0.1) }, // snow on top
 };
 const THEMES = {
   bocage: { sky: '#5cc4e8', horizon: '#fff2d6', below: '#8fd0e8', grass: '#7ddb6b', lip: '#49b65c', skirt: ['#49b65c', '#b07a4f', '#8a5a3c'], top: '#175f3d', side: () => SIDE.leaves('#124f33', '#175f3d', '#1f7a4c'), crownColor: '#175f3d', clouds: 1, mill: true, fence: true,
@@ -376,6 +507,32 @@ const THEMES = {
   nuit: { sky: '#141a3c', horizon: '#3a2f73', below: '#1c2350', stars: true, grass: '#5fcf86', lip: '#2f9a6a', skirt: ['#2f9a6a', '#5a4f8a', '#3a3463'], top: '#4a4a70', side: () => SIDE.ribs('#3d3f66', '#55578a'), crownColor: '#fff3c4', clouds: 1,
     recolor: { leaf: '#3f9a78', leaf2: '#2c7d66', earth: '#5a4f8a', earth2: '#3a3463', stone: '#8e88c0', cloud: '#5a5fb0' }, balloons: ['#ffd27a', '#ffd27a', '#ffb14a'],
     near: [['mushroom', 1], ['mushroom', 1.1], [['rock_a', 'rock_b'], 1], ['bush', 1]], trees: [['tree_pine', 1], ['tree_ball', 1]], under: [['rock_c', 1], ['mushroom', 1]] },
+  // The festive ones (2026-11-25). Same rules: what plays keeps its colours. Besides the kit, they
+  // have props of their own (craft), a landmark far away instead of the windmill, things that fly
+  // instead of the balloons (flyer), something falling through the air (fall), a nebula in the sky.
+  // fete: a fairground at dusk: booth stripes, a row of bulbs on every wall, a circus tent and a big
+  // wheel, lollipops and presents on the islets, confetti
+  fete: { sky: '#ff9ec7', horizon: '#ffe6a8', below: '#ffc2dc', grass: '#72d86a', lip: '#43b25a', skirt: ['#43b25a', '#ffd23f', '#ff8a1f'], top: '#fff7e6', side: () => SIDE.stripes('#c81d3a', '#fff7e6'), post: () => SIDE.post('#3fa7ff', '#fff7e6'), crownColor: '#ffe27a', clouds: 1, fence: true,
+    recolor: { earth: '#ffd23f', earth2: '#ff8a1f', cloud: '#fff0f6', leaf: '#5fcf86' }, balloons: ['#e63946', '#ffd23f', '#3fa7ff', '#ff5d8f', '#8ac926'], landmark: ['wheel', 'tent'],
+    tints: ['#e63946', '#3fa7ff', '#ffd23f', '#ff5d8f', '#9b5de5', '#2ec4b6'], fall: { kind: 'confetti', n: 260 },
+    near: [['lollipop', 1], ['gift', 1], ['flower', 1], ['lollipop', 0.8], ['bush', 0.9]], trees: [['tree_blossom', 1], ['tree_ball', 1], ['lollipop', 2.2]], under: [['gift', 1], ['gift', 0.8], ['flower', 1], ['lollipop', 1]] },
+  // ferme: a farm in the sun: red barn planks with a white rail, hay bales, sunflowers, the barn and
+  // the windmill far away
+  ferme: { swimmer: 'duck', sand: 'mud', sky: '#6cc8f0', horizon: '#fff4cf', below: '#bfe6a8', grass: '#86de5e', lip: '#58b544', skirt: ['#58b544', '#a8743f', '#7d5230'], top: '#fff7e6', side: () => SIDE.planks('#c6412f', '#8f2d20', '#fff7e6'), post: () => SIDE.post('#8f5a34', '#fff7e6'), postTop: '#fff7e6', crownColor: '#fff7e6', clouds: 1, mill: true, fence: true, landmark: ['barn'],
+    recolor: { cloud: '#ffffff' }, balloons: ['#ffd23f'],
+    near: [['hay', 1], ['sunflower', 1], ['sunflower', 1.1], ['bush', 1], ['flower', 1]], trees: [['tree_ball', 1], ['tree_ball', 1.15], ['hay', 1.6]], under: [['hay', 1], ['sunflower', 1], ['bush', 1], ['flower', 1]] },
+  // galaxie: deep space: a nebula and stars, hull panels lit by a line of neon, crystals on rocks
+  // floating in the void, ringed planets and flying saucers, asteroids where a ball is lost
+  galaxie: { sky: '#0b0826', horizon: '#3a1d6e', below: '#0b0826', stars: true, nebula: true, grass: '#5ad6a6', lip: '#2f9f86', skirt: ['#2f9f86', '#4b3a8f', '#2a2160'], top: '#3a3f66', side: () => SIDE.panels('#2c3157', '#1d2140', '#4df3ff'), post: () => SIDE.post('#2c3157', '#4df3ff'), crownColor: '#4df3ff', clouds: 0.55, cloudNames: ['rock_a', 'rock_b', 'rock_c'],
+    recolor: { leaf: '#b48cff', leaf2: '#8b5cf6', earth: '#4b3a8f', earth2: '#2a2160', stone: '#6d5fb0', cloud: '#6d5fb0' }, planets: ['#ff8a5c', '#5cc8ff', '#c08cff'], flyer: 'ufo', balloons: [0, 0],
+    tints: ['#4df3ff', '#ff5dd2', '#b48cff', '#7dffb0'],
+    near: [['crystal', 1], ['crystal', 0.8], [['rock_a', 'rock_b'], 1], ['mushroom', 1]], trees: [['crystal', 2.2], ['crystal', 1.8], ['rock_c', 2], ['rock_a', 2]], under: [['crystal', 1], ['rock_b', 1]] },
+  // noel: a snowy Christmas: candy-cane walls under a crest of snow, firs with baubles, presents,
+  // snowmen, a big fir far away, snow falling
+  noel: { sand: 'snow', sky: '#9fc6e8', horizon: '#f4f8ff', below: '#eaf4ff', grass: '#7fd696', lip: '#ffffff', skirt: ['#ffffff', '#c9e2f5', '#8fb4d6'], top: '#ffffff', side: () => SIDE.cane('#fff7e6', '#e63946'), post: () => SIDE.cane('#fff7e6', '#2f9e63'), crownColor: '#ffffff', clouds: 1, fence: true, landmark: ['xmas_tree'],
+    recolor: { leaf: '#ffffff', leaf2: '#e8f4ff', earth: '#c9e2f5', earth2: '#8fb4d6', cloud: '#ffffff' }, balloons: ['#e63946'],
+    tints: ['#e63946', '#2f9e63', '#3fa7ff', '#ffd23f', '#9b5de5'], fall: { kind: 'snow', n: 320 },
+    near: [['gift', 1], ['cane', 1], ['snowman', 0.6], ['gift', 0.8]], trees: [['xmas_tree', 1.2], ['xmas_tree', 1], ['snowman', 1]], under: [['gift', 1], ['gift', 0.9], ['cane', 1]] },
 };
 const PROP_KEY = new Map(Object.entries(PROP_MAT).map(([k, m]) => [m, k]));
 const dressed = new Map();
@@ -398,6 +555,7 @@ function dress(name) {
     name, sky: col(t.sky), horizon: col(t.horizon), below, sea: !!t.sea, stars: !!t.stars, grass: col(t.grass), lip: themeToon(t.lip),
     skirt: t.skirt.map(c => themeToon(c)), clouds: t.clouds, floes: !!t.floes, mill: !!t.mill, fence: !!t.fence, balloons: t.balloons,
     near: t.near, trees: t.trees, under: t.under,
+    swimmer: t.swimmer, sand: t.sand ?? 'sand', landmark: t.landmark ?? [], flyer: t.flyer ?? 'balloon', planets: t.planets ?? [], cloudNames: t.cloudNames ?? ['cloud_a', 'cloud_b', 'cloud_c'], tints: t.tints, fall: t.fall, nebula: !!t.nebula,
     wall: [side, side, top, top, side, side],
     post: [t.post ? themeToon(0xffffff, { map: t.post() }) : side, t.postTop ? themeToon(t.postTop) : top, top],
     recolor: m => swaps.get(m) ?? m, // a prop's colour in the decor: the theme's
@@ -432,6 +590,7 @@ const WORDS = {
   hazard: () => t('hazard'), checkpoint: () => t('checkpoint'), strokes: p => t('bonus', -p.add),
   key: p => t('key', p.key), wind: (p, z) => t(thin(z) ? 'conveyor' : 'wind', num(Math.hypot(...p.accel))),
   magnet: p => p.accel > 0 ? t('magnet', p.accel) : t('repeller', -p.accel),
+  gravity: p => t('gravity', num(p.g)), vortex: () => t('vortex'),
 };
 export const describe = zone => ({ text: (WORDS[zone.type] ?? (() => zone.type))(zone.params ?? {}, zone) });
 // GROUND gives the look of the ground of a zone, from its params: its tile, the way it points
@@ -456,6 +615,8 @@ const GROUND = {
   checkpoint: () => ({ map: LOOK.checker(), scale: 0.5 }),
   wind: (p, z) => thin(z) ? { map: LOOK.belt(), dir: horizontal(p.accel), run: Math.hypot(...p.accel) / 6, scale: 0.5 } : null,
   magnet: p => ({ map: LOOK.rings(p.accel > 0 ? '#e63946' : '#1f3fa6'), round: true, run: p.accel / 6, scale: 0.5 }), // red rings running in, or navy running out
+  gravity: () => ({ map: LOOK.antigrav(), run: -0.15 }), // starry indigo, and stars rising slowly through it (zoneProps)
+  vortex: () => ({ map: LOOK.vortex(), whole: true }), // an accretion swirl, turning the way it turns the ball (zone)
 };
 
 // decal gives a flat geometry lying at y 0 around the origin texture coordinates along dir (x, z),
@@ -593,9 +754,11 @@ export class View {
     this.ballShadow ??= flat(new THREE.CircleGeometry(1, 20));
     const g = this.course = new THREE.Group();
     const T = this.theme = dress(hole.theme);
+    sandLook = T.sand;
     this.dome.material.uniforms.top.value.copy(T.sky);
     this.dome.material.uniforms.low.value.copy(T.horizon);
     this.dome.material.uniforms.stars.value = T.stars ? 1 : 0;
+    this.dome.material.uniforms.nebula.value = T.nebula ? 1 : 0;
     this.scene.fog?.color.copy(T.horizon); // (the previews draw without fog)
     this.below.material = T.below;
     if (T.sea) this.scrolling.push({ texture: T.below.map, speed: 0.03 });
@@ -726,12 +889,12 @@ export class View {
       }
       return null;
     };
-    const FLOWERS = [PALETTE.pink, PALETTE.sun, PALETTE.cream, PALETTE.violet, PALETTE.orange];
+    const FLOWERS = [PALETTE.pink, PALETTE.sun, PALETTE.cream, PALETTE.violet, PALETTE.orange], TINTED = new Set(['gift', 'lollipop', 'crystal']);
     // on an islet at (x, y, z) of radius r: things scattered on its top, within reach
     const dress = (x, y, z, r, things) => {
       for (const [name, s] of things) {
         const a = rand() * TAU, at = rand() ** 0.5 * r * 0.6;
-        put(name, x + Math.cos(a) * at, y, z + Math.sin(a) * at, s, undefined, name === 'flower' ? pick(FLOWERS) : undefined);
+        put(name, x + Math.cos(a) * at, y, z + Math.sin(a) * at, s, undefined, name === 'flower' ? pick(FLOWERS) : T.tints && TINTED.has(name) ? pick(T.tints) : undefined);
       }
     };
     // close by: small islets, low things only
@@ -772,15 +935,32 @@ export class View {
       d.add(mill);
       this.sails.push(mill.getObjectByName('windmill_sails'));
     }
+    for (const name of T.landmark) { // a barn, a big wheel, a circus tent, a great fir: on an islet of its own
+      const [lx, lz] = far(40, 65), o = prop(name), ly = floor - 2;
+      put('islet_l', lx, ly, lz, 1.3);
+      o.position.set(lx, ly, lz);
+      o.rotation.y = Math.atan2(cx - lx, cz - lz); // its front (+z) towards the course
+      if (name === 'xmas_tree') o.scale.setScalar(4);
+      d.add(o);
+      const spin = o.getObjectByName('wheel_spin');
+      if (spin) this.sails.push(spin);
+    }
+    for (const color of T.planets) { // high in the sky, far beyond everything
+      const a = rand() * TAU, dist = reach + 110 + rand() * 60, planet = prop('planet', color);
+      planet.position.set(cx + Math.cos(a) * dist, floor + 30 + rand() * 40, cz + Math.sin(a) * dist);
+      planet.scale.setScalar(9 + rand() * 8);
+      planet.rotation.set(rand() * 0.6, rand() * TAU, rand() * 0.6);
+      d.add(planet);
+    }
     for (const color of T.balloons ?? [PALETTE.red, pick([PALETTE.violet, PALETTE.sun, PALETTE.leaf])]) {
-      const [bx, bz] = far(45, 70), balloon = prop('balloon', color);
-      balloon.position.set(bx, floor + 5 + rand() * 6, bz);
+      const [bx, bz] = far(45, 70), balloon = prop(T.flyer, color);
+      balloon.position.set(bx, floor + 5 + rand() * 6 + (T.flyer === 'ufo' ? 6 : 0), bz);
       d.add(balloon);
       this.drifting.push({ o: balloon, y: balloon.position.y });
     }
     // the sea of clouds, on the plane where a ball is lost, the clouds lower where they are near
     if (T.clouds) for (let gx = -100; gx <= 100; gx += 20) for (let gz = -100; gz <= 100; gz += 20) {
-      const x = cx + gx + (rand() - 0.5) * 16, z = cz + gz + (rand() - 0.5) * 16, s = 1.2 + rand() ** 2 * 3.3, name = pick(['cloud_a', 'cloud_b', 'cloud_c']);
+      const x = cx + gx + (rand() - 0.5) * 16, z = cz + gz + (rand() - 0.5) * 16, s = 1.2 + rand() ** 2 * 3.3, name = pick(T.cloudNames);
       if (rand() > T.clouds) continue; // fewer clouds in some skies
       const gap = gapAt(x, z) - 2.2 * s;
       const m = put(name, x, Math.min(hole.killY - 0.1 * s, ceiling(Math.max(gap, 0)) - TOP[name] * s), z, s);
@@ -802,6 +982,21 @@ export class View {
         d.add(im);
       });
     }
+    // snow or confetti falling round the course (not in the lighter graphics: see move)
+    this.falling = null;
+    if (T.fall) {
+      const snow = T.fall.kind === 'snow', n = T.fall.n, top = floor + 12, height = 16, wide = reach + 10;
+      const shape = snow ? new THREE.IcosahedronGeometry(0.055, 0) : new THREE.PlaneGeometry(0.12, 0.07);
+      const mesh = new THREE.InstancedMesh(shape, new THREE.MeshBasicMaterial({ color: 0xffffff, side: THREE.DoubleSide }), n);
+      mesh.frustumCulled = false;
+      const items = Array.from({ length: n }, () => {
+        const a = rand() * TAU, r = Math.sqrt(rand()) * wide;
+        return { x: cx + Math.cos(a) * r, z: cz + Math.sin(a) * r, y0: rand() * height, phase: rand() * TAU };
+      });
+      if (!snow) items.forEach((_, k) => mesh.setColorAt(k, new THREE.Color(pick(T.tints))));
+      d.add(mesh);
+      this.falling = { mesh, items, top, height, speed: snow ? 0.7 : 1.1, spin: snow ? 0.5 : 3 };
+    }
     this.scene.add(d);
   }
 
@@ -817,14 +1012,15 @@ export class View {
       const shape = grow => z.shape === BOX
         ? flat(new THREE.PlaneGeometry(z.h[0] * 2 + grow, z.h[2] * 2 + grow, Math.ceil(z.h[0] * 4), Math.ceil(z.h[2] * 4)))
         : flat(new THREE.CircleGeometry(z.r + grow / 2, 48));
-      const water = z.type === 'hazard'; // alive (waterOf), its foam for a rim
+      const water = z.type === 'hazard', field = z.type === 'gravity'; // alive (waterOf), its foam for a rim; a field: faint, no rim
       const map = water ? null : look.map.clone(); // its own, to run at its own pace
       const top = new THREE.Mesh(water ? shape(0) : decal(shape(0), look, TILE * (look.scale ?? 1)),
-        water ? waterOf(z, this.hole.zones, this.renderer) : toon(0xffffff, { map, polygonOffset: true, polygonOffsetFactor: -2, polygonOffsetUnits: -4 }));
+        water ? waterOf(z, this.hole.zones, this.renderer) : toon(0xffffff, { map, polygonOffset: true, polygonOffsetFactor: -2, polygonOffsetUnits: -4, ...(field ? { transparent: true, opacity: 0.32, depthWrite: false } : {}) }));
       top.userData.own = true;
       top.position.y = floor + 0.012; // the zones of the maps start on the ground
       if (look.run && !water) this.scrolling.push({ texture: map, speed: look.run });
-      if (!water) {
+      if (z.type === 'vortex') this.turning.push({ o: top, speed: Math.sign(p.swirl) * 1.4 });
+      if (!water && !field) {
         const rim = new THREE.Mesh(shape(0.09), new THREE.MeshBasicMaterial({ color: PALETTE.ink, polygonOffset: true, polygonOffsetFactor: -1, polygonOffsetUnits: -2 }));
         rim.userData.own = true;
         rim.position.y = floor + 0.008;
@@ -903,6 +1099,22 @@ export class View {
       this.course.add(exit);
       this.turning.push({ o: exit, speed: -2.5 });
       this.beam(exit.position.clone(), 0.45, 0.6, look);
+    } else if (z.type === 'gravity') {
+      // stars rising slowly through the zone, as high as it is (up to 4): the air is light there
+      const w = z.shape === BOX ? z.h[0] : z.r, d = z.shape === BOX ? z.h[2] : z.r, n = Math.round(Math.min(60, Math.max(10, w * d * 6)));
+      const motes = new THREE.InstancedMesh(MOTE, GRAV_MAT, n);
+      motes.frustumCulled = false;
+      motes.position.copy(group.position);
+      motes.quaternion.copy(group.quaternion);
+      let seed = n * 131 + Math.round(z.c[0] * 7 + z.c[2] * 13);
+      const rand = () => (seed = (Math.abs(seed) * 16807 + 1) % 2147483647) / 2147483647;
+      const places = Array.from({ length: n }, () => {
+        if (z.shape === BOX) return [(rand() * 2 - 1) * w * 0.9, rand(), (rand() * 2 - 1) * d * 0.9];
+        const a = rand() * TAU, r = Math.sqrt(rand()) * z.r * 0.9;
+        return [Math.cos(a) * r, rand(), Math.sin(a) * r];
+      });
+      this.effects.add(motes);
+      this.floating.push({ motes, at: places, floor, height: Math.min(4, -floor * 2), speed: 0.35 });
     } else if (z.type === 'wind' && !thin(z)) {
       const d = horizontal(p.accel);
       if (d) this.wind(z, group, floor, d, Math.hypot(...p.accel));
@@ -1013,7 +1225,7 @@ export class View {
     halves.forEach(([x0, x1, y0, y1], i) => {
       const path = lane(x0, x1, y0, y1);
       if (!path || path.rx * path.rz < 0.25) return; // no room: no fin
-      const fin = prop('fin');
+      const fin = prop(this.theme.swimmer ?? 'fin');
       group.add(fin);
       this.swimming.push({ o: fin, y: floor, ...path, speed: 0.9 - i * 0.15, phase: i * 2.1 });
     });
@@ -1048,6 +1260,18 @@ export class View {
     for (const blades of this.fans) blades.rotation.z = -t * 9;
     for (const { o, y } of this.drifting) o.position.y = y + Math.sin(t * 0.5 + o.position.x) * 0.4;
     for (const sails of this.sails) sails.rotation.z = t * 0.6;
+    if (this.falling) { // snow, confetti: falling round the course, swaying
+      const { mesh, items, top, height, speed, spin } = this.falling, e = new THREE.Euler(), m = new THREE.Matrix4(), at = new THREE.Vector3(), q = new THREE.Quaternion(), one = new THREE.Vector3(1, 1, 1);
+      mesh.visible = !this.lite;
+      if (!this.lite) {
+        items.forEach(({ x, z, y0, phase }, k) => {
+          at.set(x + Math.sin(t * 0.8 + phase) * 0.35, top - (((y0 + t * speed) % height) + height) % height, z + Math.cos(t * 0.6 + phase) * 0.35);
+          q.setFromEuler(e.set(t * spin + phase, t * spin * 0.7 + phase * 2, 0));
+          mesh.setMatrixAt(k, m.compose(at, q, one));
+        });
+        mesh.instanceMatrix.needsUpdate = true;
+      }
+    }
     for (const { o, speed } of this.turning) o.rotation.y = t * speed;
     for (const { o, y, cx, cz, rx, rz, speed, phase } of this.swimming) { // round and round, heading the way it swims
       const a = t * speed + phase;
@@ -1728,13 +1952,21 @@ function waterOf(z, zones, renderer) {
 function sky() {
   const dome = new THREE.Mesh(new THREE.SphereGeometry(500, 24, 12), new THREE.ShaderMaterial({
     side: THREE.BackSide, depthWrite: false, fog: false,
-    uniforms: { top: { value: new THREE.Color(PALETTE.sky) }, low: { value: new THREE.Color(PALETTE.horizon) }, stars: { value: 0 } },
+    uniforms: { top: { value: new THREE.Color(PALETTE.sky) }, low: { value: new THREE.Color(PALETTE.horizon) }, stars: { value: 0 }, nebula: { value: 0 } },
     vertexShader: 'varying vec3 d; void main() { d = normalize(position); gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0); }',
-    fragmentShader: `uniform vec3 top, low; uniform float stars; varying vec3 d;
+    fragmentShader: `uniform vec3 top, low; uniform float stars, nebula; varying vec3 d;
+float hh(vec3 p) { return fract(sin(dot(p, vec3(12.9898, 78.233, 37.719))) * 43758.5453); }
+float vn(vec3 p) { vec3 i = floor(p), f = fract(p); f = f * f * (3.0 - 2.0 * f);
+  return mix(mix(mix(hh(i), hh(i + vec3(1, 0, 0)), f.x), mix(hh(i + vec3(0, 1, 0)), hh(i + vec3(1, 1, 0)), f.x), f.y),
+    mix(mix(hh(i + vec3(0, 0, 1)), hh(i + vec3(1, 0, 1)), f.x), mix(hh(i + vec3(0, 1, 1)), hh(i + vec3(1, 1, 1)), f.x), f.y), f.z); }
 void main() {
   vec3 c = mix(low, top, smoothstep(-0.02, 0.2, d.y));
+  if (nebula > 0.0) { // clouds of violet and teal gas across the sky
+    float a = vn(d * 3.0) * 0.6 + vn(d * 7.0 + 3.1) * 0.4, b = vn(d * 4.0 + 5.0) * 0.7 + vn(d * 9.0) * 0.3;
+    c += (vec3(0.5, 0.12, 0.55) * smoothstep(0.5, 0.85, a) + vec3(0.08, 0.4, 0.55) * smoothstep(0.58, 0.9, b)) * smoothstep(-0.05, 0.3, d.y);
+  }
   vec3 cell = floor(d * 160.0);
-  float star = step(0.9965, fract(sin(dot(cell, vec3(12.9898, 78.233, 37.719))) * 43758.5453)) * smoothstep(0.08, 0.35, d.y); // a few, high in the sky
+  float star = step(0.9965 - 0.004 * nebula, fract(sin(dot(cell, vec3(12.9898, 78.233, 37.719))) * 43758.5453)) * smoothstep(0.08, 0.35, d.y); // a few, high in the sky
   gl_FragColor = vec4(mix(c, vec3(1.0, 0.97, 0.88), star * stars), 1.0);
   #include <colorspace_fragment>
 }`,
