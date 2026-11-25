@@ -15,4 +15,5 @@ var materials = map[string]material{
 	"ice":    {0.15, 0.3, 0.7, 0},
 	"sand":   {5, 0, 0.4, 0}, // a ball that lands in it does not bounce
 	"bumper": {1, 0.3, 0.7, 9},
+	"jelly":  {1.6, 0.82, 0.8, 0}, // a trampoline, a bouncy castle: a ball that lands on it bounces high, rolls slowly
 }

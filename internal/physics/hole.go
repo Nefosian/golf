@@ -107,7 +107,8 @@ const DefaultPar = 3
 
 // themes are the looks a hole may be dressed in: the client draws them (web/scene.js THEMES), the
 // game does not play them.
-var themes = map[string]bool{"bocage": true, "ville": true, "quai": true, "canyon": true, "chateau": true, "banquise": true, "nuit": true}
+var themes = map[string]bool{"bocage": true, "ville": true, "quai": true, "canyon": true, "chateau": true, "banquise": true, "nuit": true,
+	"fete": true, "ferme": true, "galaxie": true, "noel": true}
 
 // Hole is a playable course. Fill the exported fields (or ParseHole), then call Build once.
 type Hole struct {

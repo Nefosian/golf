@@ -21,7 +21,12 @@ func (z *Zone) ActsOnEntering() bool { return z.enterer != nil }
 
 // WouldAct says whether z, which acts on entering, would do something to b if it entered it now:
 // not a checkpoint already set, a key already held.
+// A booster is left out: whether it acts depends on the way the ball was heading as it came in,
+// which a bounce later in the frame changes.
 func (z *Zone) WouldAct(b *Ball) bool {
+	if _, ok := z.enterer.(*speedpad); ok {
+		return false
+	}
 	c := *b
 	return z.enterer.enter(&c)
 }

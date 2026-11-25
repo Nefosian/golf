@@ -2,6 +2,7 @@ package physics
 
 import (
 	"errors"
+	"fmt"
 	"math"
 )
 
@@ -21,6 +22,8 @@ func init() {
 	register("key", func() Effect { return new(key) })
 	register("wind", func() Effect { return new(wind) })
 	register("magnet", func() Effect { return new(magnet) })
+	register("gravity", func() Effect { return new(gravity) })
+	register("vortex", func() Effect { return new(vortex) })
 }
 
 // maxPush is the strongest acceleration a zone may add (u/s²): gravity is 18.
@@ -42,11 +45,22 @@ func speedOK(s float64) error {
 	return nil
 }
 
-// speedpad sends the ball along Dir at Speed (its vertical speed is kept).
+// speedpad is a booster: it speeds the ball up the way it was going, it never turns it. Its
+// speed along the ground is brought to Speed at least, and to boost times what it had when it
+// already went faster, within maxSpeed (its vertical speed is kept). Dir is the way the pad points
+// (its chevrons run that way): a ball going across or against it (more than 60° off) goes through
+// untouched, or a pad between two walls would send it back and forth for ever; a ball with next to no
+// speed along the ground (one that drops onto it) is sent along Dir.
 type speedpad struct {
 	Dir   Vec3    `json:"dir"`
 	Speed float64 `json:"speed"`
 }
+
+const (
+	boost       = 1.2 // a booster always adds this share at least: a fast ball still feels it
+	boostHeaded = 0.5 // u/s: slower than this along the ground, a ball has no heading of its own
+	boostCone   = 0.5 // the cosine of the widest angle between the ball and the pad it boosts (60°)
+)
 
 func (e *speedpad) check(*Hole, *Zone) (err error) {
 	if e.Dir, err = flat(e.Dir); err != nil {
@@ -56,7 +70,16 @@ func (e *speedpad) check(*Hole, *Zone) (err error) {
 }
 
 func (e *speedpad) enter(b *Ball) bool {
-	b.V.X, b.V.Z = e.Dir.X*e.Speed, e.Dir.Z*e.Speed
+	h := math.Hypot(b.V.X, b.V.Z)
+	dx, dz := e.Dir.X, e.Dir.Z
+	if h >= boostHeaded {
+		dx, dz = b.V.X/h, b.V.Z/h
+		if dx*e.Dir.X+dz*e.Dir.Z < boostCone {
+			return false // across the pad or against it: untouched
+		}
+	}
+	s := min(max(e.Speed, h*boost), math.Sqrt(max(0, maxSpeed*maxSpeed-b.V.Y*b.V.Y)))
+	b.V.X, b.V.Z = dx*s, dz*s
 	return true
 }
 
@@ -216,6 +239,51 @@ func (e *magnet) check(h *Hole, _ *Zone) error {
 func (e *magnet) field(b *Ball, f field) field {
 	if d, err := flat(e.At.sub(b.P)); err == nil {
 		f.push = f.push.add(d.scale(e.Accel))
+	}
+	return f
+}
+
+// gravity is a field of low (or high) gravity: inside it, the ball falls with G (u/s²) instead of
+// the hole's gravity. A jump in it floats and goes further, a slope pulls less.
+type gravity struct {
+	G float64 `json:"g"`
+}
+
+func (e *gravity) check(h *Hole, _ *Zone) error {
+	if e.G < minGravity || e.G > 3*Gravity {
+		return fmt.Errorf("needs a g in [%.1f, %g]", minGravity, 3*Gravity)
+	}
+	h.accel = max(h.accel, e.G)
+	return nil
+}
+
+func (e *gravity) field(_ *Ball, f field) field {
+	f.g = e.G
+	return f
+}
+
+// vortex is a whirlpool, a black hole: it pulls the ball towards At with Accel (u/s², negative
+// pushes away), as a magnet does, and turns it round At with Swirl (u/s², counterclockwise seen
+// from above when positive).
+type vortex struct {
+	At    Vec3    `json:"at"`
+	Accel float64 `json:"accel"`
+	Swirl float64 `json:"swirl"`
+}
+
+func (e *vortex) check(h *Hole, _ *Zone) error {
+	a := math.Hypot(e.Accel, e.Swirl)
+	if e.Swirl == 0 || a > maxPush {
+		return errors.New("needs a swirl, and accel and swirl of at most 40 together")
+	}
+	h.accel += a
+	return nil
+}
+
+func (e *vortex) field(b *Ball, f field) field {
+	if d, err := flat(e.At.sub(b.P)); err == nil {
+		// d points in; (-d.Z, d.X) runs round At counterclockwise seen from above, as a turn of teleport
+		f.push = f.push.add(d.scale(e.Accel)).add(Vec3{X: -d.Z, Z: d.X}.scale(e.Swirl))
 	}
 	return f
 }
