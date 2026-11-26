@@ -2,7 +2,7 @@
 
 Minigolf multijoueur dans le navigateur. Ce dépôt est la **base propre** du jeu, réduite à
 l'essentiel : un serveur Go optimisé, le moteur physique et ses modificateurs (pads, bumpers,
-téléporteurs, zones, obstacles mobiles…), un pool de 32 trous (« Le pool de trous »), un client
+téléporteurs, zones, obstacles mobiles…), un pool de 38 trous dont deux mondes de plusieurs trous (« Le pool de trous »), des pouvoirs (« Les pouvoirs »), un client
 avec ses écrans d'avant-partie (accueil, salles, salon) et une vue 3D minimale.
 
 Le prototype d'origine (Node) et la première version Go complète (63 cartes, client Three.js)
@@ -93,7 +93,8 @@ par un navigateur avant qu'un réglage nouveau existe le reçoivent ainsi) :
 | coups par trou | 1 à 20, ou selon le trou (8 s'il ne dit rien) | selon le trou |
 | temps après le premier arrivé | 10 à 600 s | 60 s |
 | temps par trou | 1 à 10 min | 3 min |
-| parcours | au hasard : N trous tirés parmi ceux cochés ; sur mesure : une liste dans l'ordre | 9 au hasard parmi tous |
+| parcours | au hasard : N trous tirés parmi ceux cochés (les trous d'un monde viennent ensemble, dans l'ordre) ; sur mesure : une liste dans l'ordre | 9 au hasard parmi tous |
+| pouvoirs | oui ou non (voir « Les pouvoirs ») | oui |
 
 **16 joueurs au plus**, autant que de couleurs. Mesuré le 18/11/2026 (une salle, chacun tire toutes
 les 2,5 s, collisions, temps simulé), sur le trou le plus lourd (vent et aimants) : 2 ms au pire
@@ -363,12 +364,52 @@ et `once` pour n'agir qu'une fois par balle et par trou. 64 zones au plus par tr
 | `wind` | `accel` | poussée continue : vent, ventilateur ; une zone fine (0,3 de haut au plus) est un tapis roulant |
 | `magnet` | `at`, `accel` | attire (ou repousse) horizontalement vers `at` |
 | `gravity` | `g` | la gravité devient `g` dans la zone (1,6 à 54) : un saut y flotte et va plus loin, une pente y tire moins. Une zone haute au-dessus d'un vide fait un pont d'apesanteur |
+| `powerup` | | une caisse à pouvoir : le joueur reçoit un pouvoir tiré au hasard si la salle joue avec, toujours `once` (voir « Les pouvoirs ») |
 | `vortex` | `at`, `accel`, `swirl` | un trou noir, un tourbillon : attire vers `at` comme un aimant et fait tourner la balle autour (`swirl` > 0 : sens inverse des aiguilles d'une montre vu de dessus). Plus fort que la résistance au roulement, il doit avoir le trou en son centre ; son `swirl` sous 2,2 garantit qu'une balle ne tourne pas sans fin |
 
 Toute vitesse reste sous 24 u/s, toute poussée sous 40 u/s². Une poussée plus faible que la
 résistance au roulement (2,2 u/s² sur l'herbe) ne fait pas repartir une balle arrêtée.
 
-**Le pool de trous** : 32 trous, `maps/p01-*.json` à `maps/p32-*.json` (p21 à p32 : les trous à thème festif, ferme,
+**Les mondes** (2026-11-26) : un monde est un petit parcours de plusieurs trous sur un même terrain, plus
+grand et plus dur qu'un trou seul. Chacun de ses trous est une carte à part entière, avec tout le terrain, son
+départ et son trou à lui, `world` (le nom du monde), `stage` (sa place, à partir de 1) et `flags` (où sont les
+autres trous du monde : le client y plante un drapeau blanc, rien n'est creusé). Le départ d'un trou est à
+côté du green du précédent ; le décor est le même d'un trou à l'autre. Tirés au hasard, les trous d'un monde
+viennent ensemble et dans l'ordre. Un script de `tools/maps/holes/` fait tout le monde (`stages` et `stage`
+dans `lib.mjs`) : `build.mjs` écrit un fichier par trou (`w1-le-volcan-1.json`...). Une zone porte le numéro
+du trou qu'elle sert (`stage`) : `tools/verify` ne demande d'atteindre que celles du trou vérifié. Deux
+mondes de trois trous : **Le Volcan** (la lave à la place de l'eau, une rampe d'obsidienne qui glisse comme
+la glace, un cratère avec une cheminée qui souffle et des bulles de lave autour du trou) et **L'Île au Trésor**
+(un lagon aux requins, la jungle, un pont de planches sans rambarde vers le rocher au trésor, le canon du
+bateau).
+
+**Les pouvoirs** (2026-11-26), quand la salle joue avec (réglage du salon, oui par défaut). Chaque joueur en
+a deux en main au plus : un tiré au hasard au début de chaque trou, d'autres dans les caisses (zones
+`powerup`). Il les joue par un clic sur leur case en bas de l'écran ou les touches 1 et 2 (message
+`power`). Ils font partie de l'état de la balle sur sa piste (`golfer`, `internal/game/powers.go`) : ce
+qu'ils font est calculé d'avance et rejoué à l'identique, comme le reste ; un pouvoir actif sur une balle est
+dans `physics.Ball.Power` et dure jusqu'à son arrêt.
+
+| Pouvoir | Pour | Effet |
+| --- | --- | --- |
+| Super coup | son prochain tir | part 1,5 fois plus vite (24 au plus) |
+| Saut | son prochain tir | bondit (7,5 u/s vers le haut) : par-dessus un muret, à jouer près de l'obstacle |
+| Fantôme | son prochain tir | traverse les autres balles et les obstacles mobiles |
+| Colle | son prochain tir | résistance au roulement ×4, ne rebondit pas sur le sol |
+| Aimant | son prochain tir | le trou l'attire (6 u/s²) à moins de 3,5 de lui |
+| Boulet | les autres | leur prochain tir part à 60 % |
+| Brouillard | les autres | leur écran est voilé jusqu'à leur prochain tir (un effet du client) |
+| Échange | la balle la plus proche du trou | elle et la sienne changent de place (les deux au repos, la sienne plus loin) |
+
+Un pouvoir pour soi s'arme (un seul à la fois, la flèche devient violette) ; un pouvoir contre les autres agit
+tout de suite, refusé s'il n'a personne à viser (erreur `power`). Le tirage dépend de l'image, du joueur et
+de la caisse : une piste rejouée tire les mêmes. Le client reçoit la main de chacun dans `room` (`powers`,
+`armed`, `curse`) et trois événements : 15 un pouvoir joué, 16 un pouvoir reçu d'une caisse, 17 touché par
+celui d'un autre (valeur : le pouvoir). Vérifié par un essai temporaire du moteur (super coup deux fois plus
+loin, saut par-dessus un mur de 0,45, fantôme qui laisse l'autre balle en place, colle quatre fois plus
+courte, aimant qui fait tomber une balle passée à 1,8 du trou, boulet, échange), puis en jeu dans Edge.
+
+**Le pool de trous** : 38 trous, `maps/p01-*.json` à `maps/p32-*.json` et les six trous des deux mondes (p21 à p32 : les trous à thème festif, ferme,
 galactique et de Noël, voir « Les trous festifs » dans `docs/parcours-v2.md`), conçus pour 3 à 9 joueurs qui
 tirent en même temps (les balles se cognent). Leurs idées (le niveau, la vedette, la ligne sûre et la
 ligne risquée, ce que le jeu à plusieurs y crée) et leurs mesures sont dans `docs/parcours-v2.md`, les
@@ -398,7 +439,11 @@ d'ampoules), et quatre thèmes de fête, chacun avec ses props faits dans `web/s
 confettis qui tombent), `ferme` (planches de grange, bottes de foin, tournesols, grange, la boue pour
 le sable, des canards dans les mares), `galaxie` (espace : nébuleuse, néons, cristaux, astéroïdes,
 planètes à anneaux, soucoupes volantes), `noel` (murs sucre d'orge, sapins décorés, cadeaux,
-bonshommes de neige, neige poudreuse pour le sable, neige qui tombe ; pas en graphismes allégés). Ce qui joue garde ses couleurs partout. Le choix des couleurs, les contrôles de
+bonshommes de neige, neige poudreuse pour le sable, neige qui tombe ; pas en graphismes allégés), et les
+thèmes des mondes : `volcan` (basalte veiné de lave, herbe de cendre, la lave dans les bassins et en mer sous
+le parcours, la glace en obsidienne, des braises qui montent, le volcan qui fume au loin, des arbres morts) et
+`pirate` (planches délavées, sable, palmiers, coffres au trésor pour caisses à pouvoir, une épave au large,
+des mouettes). Ce qui joue garde ses couleurs partout. Le choix des couleurs, les contrôles de
 lisibilité et le thème de chaque trou sont dans `docs/themes.md` ; le code dans `THEMES`, `SIDE`,
 `CROWN` et `dress()` de `web/scene.js`. Le serveur refuse un thème inconnu.
 
@@ -576,6 +621,19 @@ dans le PATH (ou `CHROME=/chemin`) ; l'image le construit avec le Chromium de De
 WebGL sans carte graphique (celui d'Alpine ne le fait pas).
 
 ### Les modèles 3D
+
+**Depuis le 2026-11-25, le rendu est réaliste** : ce qui suit sur le style autocollant décrit l'origine des
+modèles, plus ce qu'on voit. Toutes les surfaces sont des matériaux physiques (`MeshStandardMaterial`,
+tone mapping neutre, le ciel en lumière d'environnement) ; les contours d'encre ne sont plus dessinés (leurs
+maillages restent, invisibles) ; les murs et les matières naturelles ont des textures en relief faites dans
+le navigateur (feuillage, brique, pierre, planches, rondins, roche, terre, gazon des îlots) ; le gazon a des
+brins (`turf`), des zones sèches et une ombre de contact au pied des murs, calculée une fois par trou
+(`bakeContact`) ; arbres, buissons, rochers sont refaits en code (`the decor, realistic` dans
+`web/scene.js`), les nuages sont des volutes douces dessinées en un appel (`cloudPuffs`), la mer des thèmes
+`quai`, `volcan` et `pirate` est animée (`SEA`), les balles sont des balles de golf laquées à alvéoles.
+Mesuré sur 10 trous (Chrome sans carte graphique) : 30 % d'appels de dessin en moins et deux à trois fois moins
+de triangles qu'avant ; chaque pixel coûte un peu plus (la lumière physique), d'où l'option « graphismes
+allégés » qui reste.
 
 Le style : **des autocollants en relief qui flottent dans le ciel**, le prolongement en 3D des
 menus. Ombrage toon en trois tons (`MeshToonMaterial`, une rampe plus douce pour le crème et le

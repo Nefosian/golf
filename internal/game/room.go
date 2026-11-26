@@ -142,6 +142,10 @@ func (r *Room) push() {
 		}
 		info := playerInfo{ID: m.s.id, Name: m.s.profile.Load().name, Color: m.color, Connected: m.s.connected(),
 			Strokes: int(p.strokes), Finished: p.is(bitFinished), Scores: m.scores}
+		if playing && r.play.Powers && m.ball != nil {
+			g := r.sim.state(m.ball, now)
+			info.Powers, info.Armed, info.Curse = []int{int(g.powers[0]), int(g.powers[1])}, int(g.armed), int(g.curse)
+		}
 		// the standings are those of the holes that are over: the same holes for everybody
 		over := m.scores
 		if playing {
@@ -381,6 +385,12 @@ func (r *Room) handle(s *Session, msg *clientMsg) {
 			r.stop()
 		case msg.T == "kick" && m == r.owner:
 			r.kick(msg.ID)
+		case msg.T == "power":
+			if r.sim == nil || !r.play.Powers || !r.sim.power(m.ball, r.sync(t), msg.Slot) {
+				s.send(errFrame("power"))
+				return
+			}
+			r.push()
 		case msg.T == "shoot":
 			l := math.Hypot(msg.DX, msg.DZ)
 			if msg.Power <= 0 || l < 1e-6 || math.IsInf(l, 0) || r.sim == nil || !r.sim.shoot(m.ball, r.sync(t), msg.DX/l, msg.DZ/l, msg.Power) {

@@ -7,6 +7,8 @@
 <link rel="stylesheet" href="style.css">
 
 <canvas id="view"></canvas>
+<div id="vignette"></div>
+<div id="fog" hidden></div>
 
 <!-- during a game (web/hud.js): the menu top left, the ranking top right, the strokes at the bottom;
      the top of the screen in between stays clear, the course and the aim are there -->
@@ -14,6 +16,7 @@
 <button id="mini" class="hud" type="button" aria-label="Classement complet" data-t-label="ranking.full"></button>
 <div id="bar" class="hud-row">
   <div id="strokes" class="hud"><span class="lbl" data-t="hud.strokes">Coups</span><span id="strokes-n" class="big"></span></div>
+  <div id="powers" class="hud" hidden></div>
   <div id="timer" class="hud" hidden><span class="lbl" data-t="hud.timer">Fin du trou</span><span id="timer-n" class="big"></span></div>
 </div>
 <div id="splash" class="hud" hidden><p id="splash-n" class="n"></p><p id="splash-t" class="t"></p><span id="splash-m" class="chip"></span></div>
@@ -84,6 +87,7 @@
       </div>
       <div id="strip" class="strip"></div>
       <div class="set"><span class="k" data-t="set.collisions">Les balles se cognent</span><span class="seg ctl" data-seg="collisions"><button data-v="true" data-t="yes">Oui</button><button data-v="false" data-t="no">Non</button></span><span class="v" data-val="collisions"></span></div>
+      <div class="set"><span class="k" data-t="set.powers">Pouvoirs</span><span class="seg ctl" data-seg="powers"><button data-v="true" data-t="yes">Oui</button><button data-v="false" data-t="no">Non</button></span><span class="v" data-val="powers"></span></div>
       <div class="set"><span class="k" data-t="set.strokes">Coups par trou</span><span class="stepper ctl" data-num="strokes"><button data-d="-1" aria-label="Moins" data-t-label="less">−</button><span class="val"><input inputmode="numeric" aria-label="Coups par trou" data-t-label="set.strokes"></span><button data-d="1" aria-label="Plus" data-t-label="more">+</button></span><span class="v" data-val="strokes"></span></div>
       <div class="set"><span class="k" data-t="set.countdown">Temps après le premier arrivé</span><span class="stepper ctl" data-num="countdown"><button data-d="-1" aria-label="Moins" data-t-label="less">−</button><span class="val"><input inputmode="numeric" aria-label="Temps après le premier arrivé, en secondes" data-t-label="set.countdown.label"><span class="unit">s</span></span><button data-d="1" aria-label="Plus" data-t-label="more">+</button></span><span class="v" data-val="countdown"></span></div>
       <div class="set"><span class="k" data-t="set.limit">Temps par trou</span><span class="stepper ctl" data-num="limit"><button data-d="-1" aria-label="Moins" data-t-label="less">−</button><span class="val"><input inputmode="numeric" aria-label="Temps par trou, en minutes" data-t-label="set.limit.label"><span class="unit">min</span></span><button data-d="1" aria-label="Plus" data-t-label="more">+</button></span><span class="v" data-val="limit"></span></div>

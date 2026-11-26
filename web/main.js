@@ -88,6 +88,7 @@ on.over = gameOver;
 on.replaced = () => { $('status').textContent = t('replaced'); };
 on.error = code => {
   if (code === 'shot') { waiting = 0; return; } // not played: the ball was not ours to shoot
+  if (code === 'power') { banner(t('pow.no')); return; }
   if (code === 'nocourse') { toast(t('why.nocourse')); return; }
   toast(WHY.includes(code) ? t('why.' + code) : code);
   home();
@@ -146,6 +147,9 @@ on.event = e => {
   else if (mine && e.kind === EVENT.out) banner(t('out'));
   else if (mine && e.kind === EVENT.maxed) banner(t('maxed'));
   else if (mine && e.kind === EVENT.gaveUp) banner(t('gaveup'));
+  else if (e.kind === EVENT.powerGot && mine) { sfx.holed?.(1, 0.6); banner(t('pow.got', hud.powerName(e.value))); }
+  else if (e.kind === EVENT.power) { sfx.rim?.(4, mine ? 1 : 0.6); const nm = hud.powerName(e.value); banner(mine ? (e.value <= 5 ? t('pow.armed', nm) : nm + ' !') : t('pow.used', nameOf(game.room.players.find(p => p.id === e.id) ?? {}), nm)); }
+  else if (e.kind === EVENT.cursed && mine) { sfx.out?.(1, 0.8); banner(t('pow.hit', hud.powerName(e.value))); }
 };
 
 // ---------------------------------------------------------------------------- the player
@@ -244,7 +248,7 @@ function frame() {
   if (drag && !canAim()) drag = null;
   const shot = drag && aim(now);
   // yellow for a putt, red at full power; brighter when the swing passes the middle of the line
-  if (shot) view.aim(b.x, b.y - game.hole.ballR, b.z, shot.yaw, 0.3 + shot.power * 3, 0.15 * (1 - shot.power), 0.5 + shot.lined * 0.2);
+  if (shot) view.aim(b.x, b.y - game.hole.ballR, b.z, shot.yaw, 0.3 + shot.power * 3, hud.armedPower() ? 0.78 : 0.15 * (1 - shot.power), 0.5 + shot.lined * 0.2); // an armed power: a violet arrow
   else if (drag) view.armed(b.x, b.y - game.hole.ballR, b.z); // letting go here cancels
   else view.hideAim();
   view.render();

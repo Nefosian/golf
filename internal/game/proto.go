@@ -30,6 +30,8 @@ import (
 //	                                           keeps those it started with)
 //	{"t":"start"}                              start a game with the room's settings (the owner, at any time)
 //	{"t":"shoot","dx":0,"dz":-1,"power":0.5}   power in (0, 1]
+//	{"t":"power","slot":0}                     play the power in hand slot (0 or 1): one for the next shot is
+//	                                           armed, one against the others acts at once (powers.go)
 //	{"t":"giveup"}                             give up the current hole: the player counts its stroke limit,
 //	                                           its ball stays where it is, a ghost
 //	{"t":"stop"}                               end the game, back to the lobby (the owner)
@@ -53,7 +55,8 @@ import (
 //	{"t":"over"}                               the last hole is over: a "room" with the final scores follows
 //	{"t":"err","code":"notfound"}              or "full", "private" (went private since
 //	                                           the list was sent), "nocourse" (no hole to play), "locked" (too many wrong codes), "busy" (too many
-//	                                           rooms), "shot" (a "shoot" that was not played)
+//	                                           rooms), "shot" (a "shoot" that was not played), "power" (a "power"
+//	                                           that was not played)
 //
 // and one binary frame, the paths. The server does not send where the balls are, many times a
 // second: as soon as something sets a ball in motion it sends where every ball is going to be,
@@ -106,6 +109,9 @@ const (
 	evTeleport = 12 // a teleporter moved the ball, a jump in its path: the index of the zone
 	evStrokes  = 13 // a zone changed the strokes of the player: the strokes
 	evGaveUp   = 14 // the player gave up the hole: the strokes
+	evPower    = 15 // the player played a power: which (powers.go)
+	evPowerGot = 16 // the player got a power from a box: which
+	evCursed   = 17 // another player's power hit this one: which
 )
 
 // fromPhysics is the event for what the physics reports.
@@ -132,6 +138,7 @@ type clientMsg struct {
 	DX       float64   `json:"dx"`
 	DZ       float64   `json:"dz"`
 	Power    float64   `json:"power"`
+	Slot     int       `json:"slot"` // of a power in hand
 }
 
 const (
@@ -274,9 +281,12 @@ type playerInfo struct {
 	Connected bool   `json:"connected"`
 	Strokes   int    `json:"strokes"` // on the current hole
 	Finished  bool   `json:"finished"`
-	Scores    []int  `json:"scores"` // strokes per hole of the game
-	Total     int    `json:"total"`  // strokes over the holes that are over
-	Rank      int    `json:"rank"`   // on that total: 1 for the fewest, shared when equal; 0: took no part in the game
+	Scores    []int  `json:"scores"`           // strokes per hole of the game
+	Total     int    `json:"total"`            // strokes over the holes that are over
+	Rank      int    `json:"rank"`             // on that total: 1 for the fewest, shared when equal; 0: took no part in the game
+	Powers    []int  `json:"powers,omitempty"` // in hand on the current hole, 0 where there is none (when the game plays with powers)
+	Armed     int    `json:"armed,omitempty"`  // the power the next shot carries
+	Curse     int    `json:"curse,omitempty"`  // what the others' powers did to the next shot: 1 weighed, 2 in a fog
 }
 
 // roomMsg is the whole state of a room, pushed to its members whenever something changes.

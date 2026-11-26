@@ -26,7 +26,7 @@ const (
 // of them may overlap, they act the same in either order. Any zone that sets the ball's speed or
 // place may not overlap another one that acts on entering: the second would not act, or act on a
 // ball the first has changed, depending on which comes first in the map.
-var passive = map[string]bool{"hazard": true, "checkpoint": true, "strokes": true, "key": true}
+var passive = map[string]bool{"hazard": true, "checkpoint": true, "strokes": true, "key": true, "powerup": true}
 
 // span is what a collider or a zone may occupy: seen from above a circle, or a rectangle along the
 // unit axis (ux, uz) and its normal (an upright box, exactly; any other one, its bounding box), and
@@ -210,7 +210,7 @@ func (h *Hole) validate() error {
 		}
 		if z.Once && !passive[z.Type] {
 			// one that moves the ball, once, would be gone for a ball put back after a penalty
-			return fmt.Errorf("zone %d %s: once is for zones that only mark the ball (%s)", i, z.Type, "hazard, checkpoint, strokes, key")
+			return fmt.Errorf("zone %d %s: once is for zones that only mark the ball (%s)", i, z.Type, "hazard, checkpoint, strokes, key, powerup")
 		}
 		if z.enterer != nil && overlap(s, shaft) {
 			return fmt.Errorf("zone %d %s: a zone that acts on entering does not reach into the cup", i, z.Type)
@@ -239,6 +239,10 @@ func (h *Hole) validate() error {
 		case *strokes:
 			if !z.Once {
 				return fmt.Errorf("zone %d strokes: a bonus is once, or it can be taken again and again", i)
+			}
+		case *powerup:
+			if !z.Once {
+				return fmt.Errorf("zone %d powerup: a power box is once, or it can be taken again and again", i)
 			}
 		case *checkpoint:
 			if err := h.restsOn(e.At, i); err != nil {

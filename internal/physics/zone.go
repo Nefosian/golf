@@ -18,7 +18,8 @@ type Zone struct {
 	H      Vec3            `json:"h"`
 	R      float64         `json:"r,omitempty"`
 	HH     float64         `json:"hh,omitempty"`
-	Once   bool            `json:"once,omitempty"` // acts on a ball once per hole
+	Once   bool            `json:"once,omitempty"`  // acts on a ball once per hole
+	Stage  int             `json:"stage,omitempty"` // in a world, the hole (1, 2...) it belongs to; 0: every one
 	Params json.RawMessage `json:"params,omitempty"`
 
 	idx     int

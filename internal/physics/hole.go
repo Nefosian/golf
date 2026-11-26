@@ -108,7 +108,7 @@ const DefaultPar = 3
 // themes are the looks a hole may be dressed in: the client draws them (web/scene.js THEMES), the
 // game does not play them.
 var themes = map[string]bool{"bocage": true, "ville": true, "quai": true, "canyon": true, "chateau": true, "banquise": true, "nuit": true,
-	"fete": true, "ferme": true, "galaxie": true, "noel": true}
+	"fete": true, "ferme": true, "galaxie": true, "noel": true, "volcan": true, "pirate": true}
 
 // Hole is a playable course. Fill the exported fields (or ParseHole), then call Build once.
 type Hole struct {
@@ -126,6 +126,13 @@ type Hole struct {
 	Solo       bool    `json:"solo,omitempty"`       // the balls go through each other
 
 	Theme string `json:"theme,omitempty"` // the look the client dresses it in (web/scene.js THEMES); "": bocage
+
+	// A world (2026-11-26) is a course of several holes on one ground: each of its holes is a map of
+	// its own with the whole ground, its own tee and cup, played one after the other. Flags are where
+	// the other cups of the world are, for the client to show (they are not cut in the ground).
+	World string `json:"world,omitempty"`
+	Stage int    `json:"stage,omitempty"` // its place in its world, from 1
+	Flags []Vec3 `json:"flags,omitempty"`
 
 	grid, zgrid grid
 	g           float64 // gravity
@@ -173,6 +180,9 @@ func (h *Hole) Build() error {
 	}
 	if h.Theme != "" && !themes[h.Theme] {
 		return fmt.Errorf("unknown theme %q", h.Theme)
+	}
+	if len(h.Flags) > 8 {
+		return errors.New("a world has 9 holes at most: 8 other flags")
 	}
 	h.g, h.speed, h.enters, h.forces, h.teleports = Gravity, 0, false, false, nil
 	if h.Gravity != 0 {

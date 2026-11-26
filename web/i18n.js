@@ -64,6 +64,7 @@ const W = {
   'less': ['Moins', 'Less'],
   'more': ['Plus', 'More'],
   'set.collisions': ['Les balles se cognent', 'Balls collide'],
+  'set.powers': ['Pouvoirs', 'Powers'],
   'yes': ['Oui', 'Yes'],
   'no': ['Non', 'No'],
   'set.strokes': ['Coups par trou', 'Strokes per hole'],
@@ -184,6 +185,24 @@ const W = {
   'repeller': [s => `Répulseur ${s}`, s => `Repeller ${s}`],
   'gravity': [g => `Apesanteur ${g}`, g => `Low gravity ${g}`],
   'vortex': ['Trou noir', 'Black hole'],
+  'powerup': ['Caisse à pouvoir', 'Power box'],
+  // the powers (internal/game/powers.go), by number
+  'pow.1': ['Super coup', 'Super shot'], 'pow.1.d': ['Ton prochain tir part 1,5 fois plus fort.', 'Your next shot leaves 1.5 times as hard.'],
+  'pow.2': ['Saut', 'Jump'], 'pow.2.d': ['Ton prochain tir bondit : par-dessus un muret ou un trou.', 'Your next shot hops: over a low wall or a gap.'],
+  'pow.3': ['Fantôme', 'Ghost'], 'pow.3.d': ['Ton prochain tir traverse les autres balles et ce qui bouge.', 'Your next shot goes through the other balls and what moves.'],
+  'pow.4': ['Colle', 'Glue'], 'pow.4.d': ['Ton prochain tir freine fort et ne rebondit pas.', 'Your next shot brakes hard and does not bounce.'],
+  'pow.5': ['Aimant', 'Magnet'], 'pow.5.d': ['Le trou attire ton prochain tir quand il passe près.', 'The cup pulls your next shot in when it comes close.'],
+  'pow.6': ['Boulet', 'Ball and chain'], 'pow.6.d': ['Le prochain tir des autres part bien moins fort.', 'The others’ next shot is much weaker.'],
+  'pow.7': ['Brouillard', 'Fog'], 'pow.7.d': ['Les autres jouent leur prochain tir dans le brouillard.', 'The others play their next shot in a fog.'],
+  'pow.8': ['Échange', 'Swap'], 'pow.8.d': ['Ta balle prend la place de la balle la plus proche du trou.', 'Your ball takes the place of the ball nearest the cup.'],
+  'pow.title': ['Pouvoirs', 'Powers'],
+  'pow.armed': [p => `Prêt pour ton prochain tir : ${p}`, p => `Ready for your next shot: ${p}`],
+  'pow.got': [p => `Pouvoir : ${p} !`, p => `Power: ${p}!`],
+  'pow.used': [(who, p) => `${who} : ${p} !`, (who, p) => `${who}: ${p}!`],
+  'pow.hit': [p => `On t’a lancé : ${p} !`, p => `You got hit: ${p}!`],
+  'pow.no': ['Pas possible maintenant', 'Not possible now'],
+  'pow.weight': ['Boulet : ton prochain tir est affaibli', 'Ball and chain: your next shot is weaker'],
+  'pow.key': [k => `Touche ${k}`, k => `Key ${k}`],
 };
 
 // t is the text of key in the language, made with args when it says something

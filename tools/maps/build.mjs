@@ -14,10 +14,12 @@ const files = readdirSync(join(here, 'holes')).filter(f => f.endsWith('.mjs') &&
 if (!files.length) { console.error('no hole matches', want.join(' ')); process.exit(1); }
 for (const f of files.sort()) {
   const mod = await import(pathToFileURL(join(here, 'holes', f)));
-  const t = mod.default();
-  const lost = loose(t.h);
-  if (lost.length) { console.error(`${f}: a path ends on no floor at ${lost.map(p => '[' + p.join(', ') + ']').join(', ')}`); process.exitCode = 1; continue; }
-  const out = join(here, '..', '..', 'maps', f.replace(/\.mjs$/, '.json'));
-  writeFileSync(out, emit(t.h));
-  console.log('maps/' + f.replace(/\.mjs$/, '.json'), '·', t.h.name);
+  const made = mod.default(), many = Array.isArray(made); // a world: its holes, a file each (stages in lib.mjs)
+  for (const [i, t] of (many ? made : [made]).entries()) {
+    const lost = loose(t.h);
+    if (lost.length) { console.error(`${f}: a path ends on no floor at ${lost.map(p => '[' + p.join(', ') + ']').join(', ')}`); process.exitCode = 1; continue; }
+    const name = f.replace(/\.mjs$/, many ? `-${i + 1}.json` : '.json'), out = join(here, '..', '..', 'maps', name);
+    writeFileSync(out, emit(t.h));
+    console.log('maps/' + name, '·', t.h.name);
+  }
 }
