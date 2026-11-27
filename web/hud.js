@@ -69,11 +69,12 @@ export function shot() {
 // update shows the room as the server last told it
 export function update() {
   const room = game.room;
-  if (!room?.playing) { win.close(); return; }
+  if (!room?.playing) { win.close(); $('powers').hidden = $('fog').hidden = true; return; }
   mini(room);
   const p = me();
   $('strokes').hidden = !p;
   if (p) $('strokes-n').replaceChildren(String(p.strokes), el('small', '', '/' + room.maxStrokes));
+  powers(p);
   if (splashPending) {
     splashPending = false;
     $('splash-n').textContent = t('hole.of.long', room.pos + 1, room.course.length);
@@ -100,6 +101,51 @@ export function frame() {
     if ($('timer-n').textContent !== t) $('timer-n').textContent = t;
   }
 }
+
+// ---------------------------------------------------------------------------- the powers
+// Two hands at the bottom, beside the strokes: a click (or keys 1 and 2) plays a power. One for our
+// next shot shows armed; the fog the others threw veils the screen until we shoot (index.html #fog).
+// Their picture: a small sign each, drawn here (no words on the course, a name beside it).
+const POW_ICON = {
+  1: 'M13 2 4 14h6l-2 8 10-13h-6z', // lightning
+  2: 'M3 19c3-9 15-9 18 0M17 9l3 3-3 3', // a hop
+  3: 'M6 21V10a6 6 0 0 1 12 0v11l-2-2-2 2-2-2-2 2-2-2zM10 10h.01M14 10h.01', // a ghost
+  4: 'M12 3c4 5 6 8 6 11a6 6 0 0 1-12 0c0-3 2-6 6-11z', // a drop
+  5: 'M6 4v8a6 6 0 0 0 12 0V4h-4v8a2 2 0 0 1-4 0V4z', // a magnet
+  6: 'M12 21a6 6 0 1 0 0-12 6 6 0 0 0 0 12zM12 9V5m-2-2h4', // ball and chain
+  7: 'M7 18a4 4 0 0 1 0-8 5 5 0 0 1 9.6-1.5A4.5 4.5 0 1 1 17 18zM4 21h16', // fog
+  8: 'M4 8h13l-3-3M20 16H7l3 3', // swap
+};
+const POW_COLOR = { 1: '#ff8a1f', 2: '#2ec4b6', 3: '#9b8cff', 4: '#c08cff', 5: '#e63946', 6: '#5d6b7c', 7: '#8ea4c8', 8: '#ffd23f' };
+const powIcon = p => { const s = document.createElementNS('http://www.w3.org/2000/svg', 'svg'); s.setAttribute('viewBox', '0 0 24 24'); s.setAttribute('aria-hidden', 'true'); s.innerHTML = `<path d="${POW_ICON[p]}"/>`; return s; };
+export const powerName = p => t('pow.' + p);
+export const playPower = slot => { const p = me(); if (p?.powers?.[slot]) send({ t: 'power', slot }); };
+function powers(p) {
+  const box = $('powers'), on = !!p?.powers && !p.finished;
+  box.hidden = !on;
+  $('fog').hidden = !(p && p.curse & 2 && !p.finished);
+  if (!on) return;
+  const key = JSON.stringify([p.powers, p.armed, p.curse]);
+  if (box.dataset.key === key) return;
+  box.dataset.key = key;
+  const slots = p.powers.map((pw, i) => {
+    const b = el('button', 'pow' + (pw ? '' : ' empty'));
+    b.type = 'button';
+    b.disabled = !pw;
+    if (pw) {
+      b.style.setProperty('--c', POW_COLOR[pw]);
+      b.title = `${powerName(pw)} — ${t('pow.' + pw + '.d')} (${t('pow.key', i + 1)})`;
+      b.append(powIcon(pw), el('span', 'nm', powerName(pw)), el('kbd', '', String(i + 1)));
+      b.onclick = () => playPower(i);
+    }
+    return b;
+  });
+  const extra = [];
+  if (p.armed) { const a = el('span', 'armed', ''); a.style.setProperty('--c', POW_COLOR[p.armed]); a.append(powIcon(p.armed)); a.title = t('pow.armed', powerName(p.armed)); extra.push(a); }
+  if (p.curse & 1) { const w = el('span', 'armed weight', ''); w.append(powIcon(6)); w.title = t('pow.weight'); extra.push(w); }
+  box.replaceChildren(el('span', 'lbl', t('pow.title')), ...slots, ...extra);
+}
+export const armedPower = () => me()?.armed || 0;
 
 // ---------------------------------------------------------------------------- the panels
 function pause(room) {
@@ -204,6 +250,8 @@ addEventListener('keydown', e => {
   if (document.body.dataset.screen !== 'game' || !game.room?.playing) return;
   if (e.key === 'Escape') {
     if (win.ask) win.dismiss(); else if (win.view === 'settings') open('pause'); else open(win.view ? null : 'pause');
+  } else if ((e.key === '1' || e.key === '2') && !win.view && !e.repeat) {
+    playPower(+e.key - 1);
   } else if (e.key === 'Tab') {
     e.preventDefault();
     if (!e.repeat && !win.view) { open('full'); peek = true; win.render(); }

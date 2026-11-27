@@ -25,6 +25,7 @@ type settings struct {
 	Holes      int    `json:"holes"`      // to play in "random", 1 to len(Pool)
 	Pool       []int  `json:"pool"`       // the holes "random" draws from: indices in the hub's holes
 	List       []int  `json:"list"`       // the course of "custom", a hole may come twice
+	Powers     bool   `json:"powers"`     // the players get powers (powers.go)
 }
 
 // defaults are the settings of a room whose creator did not say.
@@ -33,7 +34,7 @@ func defaults(holes int) settings {
 	for i := range pool {
 		pool[i] = i
 	}
-	return settings{Max: 8, Collisions: true, Countdown: 60, Limit: 3, Mode: "random", Holes: 9, Pool: pool, List: []int{}}
+	return settings{Max: 8, Collisions: true, Countdown: 60, Limit: 3, Mode: "random", Holes: 9, Pool: pool, List: []int{}, Powers: true}
 }
 
 // UnmarshalJSON reads the settings a client sent over the defaults: what it leaves out keeps its
@@ -80,12 +81,45 @@ func (s *settings) clean(holes int) {
 }
 
 // course is the holes of a game, in order: drawn at random from the pool, or the list. Empty when
-// there is nothing to play.
-func (s *settings) course() []int {
+// there is nothing to play. The holes of a world (world gives each hole's, "" for none) are drawn
+// together, in their order: a world in the pool counts as many holes as it has there. A random
+// course has exactly s.Holes holes: a world that would go past that is left out, and if nothing but
+// such worlds is left to fill the course, the first holes of one of them close it, in their order.
+func (s *settings) course(world func(int) string) []int {
 	if s.Mode == "custom" {
 		return slices.Clone(s.List)
 	}
-	pool := slices.Clone(s.Pool)
-	rand.Shuffle(len(pool), func(i, j int) { pool[i], pool[j] = pool[j], pool[i] })
-	return pool[:min(s.Holes, len(pool))]
+	var units [][]int // a lone hole, or the holes of a world, in their order
+	at := map[string]int{}
+	for _, i := range s.Pool {
+		w := world(i)
+		if w == "" {
+			units = append(units, []int{i})
+			continue
+		}
+		if u, ok := at[w]; ok {
+			units[u] = append(units[u], i)
+			continue
+		}
+		at[w] = len(units)
+		units = append(units, []int{i})
+	}
+	rand.Shuffle(len(units), func(i, j int) { units[i], units[j] = units[j], units[i] })
+	var course []int
+	var left [][]int // the worlds that did not fit, in the order drawn
+	for _, u := range units {
+		if len(course) == s.Holes {
+			break
+		}
+		if len(course)+len(u) > s.Holes {
+			left = append(left, u) // a world that would go past the count: another time
+			continue
+		}
+		course = append(course, u...)
+	}
+	// only worlds too big for what is left: the first holes of one of them, in their order
+	if n := s.Holes - len(course); n > 0 && len(left) > 0 {
+		course = append(course, left[0][:n]...)
+	}
+	return course
 }

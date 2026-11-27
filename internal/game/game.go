@@ -9,7 +9,7 @@ import (
 
 // startGame starts a game with the room's settings: false when they leave nothing to play.
 func (r *Room) startGame(t float64) bool {
-	course := r.settings.course()
+	course := r.settings.course(func(i int) string { return r.hub.holes[i].World })
 	if len(course) == 0 {
 		return false
 	}
@@ -42,7 +42,7 @@ func (r *Room) startHole(pos int, t float64) {
 	if r.play.Strokes > 0 {
 		limit = r.play.Strokes
 	}
-	r.sim = newSim(hole, r.holeSeq, r.broadcast, limit, hole.Solo || !r.play.Collisions)
+	r.sim = newSim(hole, r.holeSeq, r.broadcast, limit, hole.Solo || !r.play.Collisions, r.play.Powers)
 	r.startAt = t
 	for _, m := range r.members {
 		r.tee(m)

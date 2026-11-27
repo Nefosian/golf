@@ -185,6 +185,9 @@ var squeezeDirs = func() []Vec3 {
 // and that it gets to without going through anything; up only when there is none (up, it could
 // fall on the other side of a wall). Without this the collider would push it through.
 func (w *World) squeeze(p Vec3, t float64, b *Ball) (Vec3, bool) {
+	if b.Power&PowerGhost != 0 {
+		return p, false // the moving colliders go through it
+	}
 	h := w.Hole
 	var touching []Vec3                                // the normals of the still surfaces it overlaps
 	pushed, side, sunk, into := false, false, 0.0, 0.0 // into: how deep it is in a moving collider
@@ -266,6 +269,9 @@ func (w *World) overlap(p Vec3, v *Vec3, t float64, b *Ball) (best contact, coun
 		col := &h.Colliders[i]
 		if col.Key != 0 && b.Keys&(1<<(col.Key-1)) != 0 {
 			continue // a gate this ball has the key of
+		}
+		if col.Motion != nil && b.Power&PowerGhost != 0 {
+			continue // a ghost goes through what moves
 		}
 		var ct contact
 		var ok bool

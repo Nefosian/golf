@@ -2,7 +2,7 @@
 // is at any time. No drawing and no rule of the game here. The protocol is described in
 // internal/game/proto.go; this file needs nothing from the page and runs as it is in Node.
 
-export const EVENT = { shot: 1, holed: 2, out: 3, maxed: 4, floor: 5, wall: 6, post: 7, cup: 8, ball: 9, kick: 10, zone: 11, teleport: 12, strokes: 13, gaveUp: 14 };
+export const EVENT = { shot: 1, holed: 2, out: 3, maxed: 4, floor: 5, wall: 6, post: 7, cup: 8, ball: 9, kick: 10, zone: 11, teleport: 12, strokes: 13, gaveUp: 14, power: 15, powerGot: 16, cursed: 17 };
 export const REST = 1, SOLID = 2, HOLED = 4; // flags of a ball once it is at the end of its path
 
 const CATCH_UP = 0.15; // what is late runs this much faster until it is back on time

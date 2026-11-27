@@ -46,6 +46,20 @@ const (
 	refineDepth = 3    // and so on: down to 1/64 of a step
 )
 
+// The powers a shot may carry (the game arms them, see internal/game/powers.go). Each lasts until the
+// ball comes to rest, or is put back.
+const (
+	PowerGhost  uint8 = 1 << iota // the ball goes through the other balls and the moving obstacles
+	PowerSticky                   // it brakes hard and does not bounce off the ground
+	PowerPull                     // the cup pulls it in from close by
+)
+
+const (
+	stickyFric = 4   // the rolling resistance of a sticky ball, times that of the ground
+	pullReach  = 3.5 // u: how far from the cup a pulled ball feels it
+	pullAccel  = 6.0 // u/s²: how hard
+)
+
 // NoWake is the WakeAt of a ball at rest that no moving collider can reach.
 const NoWake = math.MaxInt
 
@@ -74,6 +88,8 @@ type Ball struct {
 	Keys    uint8  // the gates it goes through, a bit per key
 	Taken   uint64 // the zones that act once it went through, a bit per zone
 	WakeAt  int    // at rest: the first frame a moving collider may move it, or NoWake; 0 while moving
+	Power   uint8  // the powers at work on this shot (PowerGhost...): the ball loses them once at rest
+	Gifts   uint8  // power boxes (zones "powerup") it went through since the game last looked
 
 	on                    support
 	restTimer, movingTime float64
@@ -100,11 +116,20 @@ func (b *Ball) Shoot(dx, dz, power float64) {
 
 // Place puts the ball at rest on pos. World.Settle must see it before it is played again.
 func (b *Ball) Place(pos Vec3) {
-	b.P, b.V, b.Rest, b.on, b.Stuck, b.Out, b.WakeAt, b.placed = pos, Vec3{}, true, flatGrass, false, false, 0, true
+	b.P, b.V, b.Rest, b.on, b.Stuck, b.Out, b.WakeAt, b.placed, b.Power = pos, Vec3{}, true, flatGrass, false, false, 0, true, 0
 }
 
 // Collides says whether other balls bounce off this one.
-func (b *Ball) Collides() bool { return b.Solid && !b.Holed && !b.Frozen }
+func (b *Ball) Collides() bool { return b.Solid && !b.Holed && !b.Frozen && b.Power&PowerGhost == 0 }
+
+// Hop throws the ball up at vy (a jump power): it leaves the ground.
+func (b *Ball) Hop(vy float64) {
+	b.V.Y, b.on = vy, support{}
+	b.wake()
+}
+
+// Boost speeds the ball up k times, within maxSpeed (a super shot).
+func (b *Ball) Boost(k float64) { b.V, _ = capSpeed(b.V.scale(k)) }
 
 func (b *Ball) wake() {
 	b.Rest, b.restTimer, b.movingTime, b.WakeAt = false, 0, 0, 0
@@ -162,10 +187,17 @@ type field struct {
 }
 
 func (w *World) field(b *Ball) field {
-	if !w.Hole.forces {
-		return w.Hole.calm
+	f := w.Hole.calm
+	if w.Hole.forces {
+		f = w.Hole.applyForces(b, f)
 	}
-	return w.Hole.applyForces(b, w.Hole.calm)
+	if b.Power&PowerPull != 0 { // the cup pulls it, near it and about its height
+		cup := &w.Hole.Cup
+		if d, err := flat(Vec3{X: cup.X - b.P.X, Z: cup.Z - b.P.Z}); err == nil && math.Hypot(cup.X-b.P.X, cup.Z-b.P.Z) < pullReach && math.Abs(b.P.Y-cup.Y) < 1.5 {
+			f.push = f.push.add(d.scale(pullAccel))
+		}
+	}
+	return f
 }
 
 // holds says whether a ball stopped on this ground stays there.
@@ -288,7 +320,7 @@ func (w *World) stepBall(b *Ball, t, h float64, depth int) {
 // change within it), or after a zone acted on it.
 func (w *World) bounceStep(b *Ball, t, h float64) {
 	f := &w.Hole.calm
-	if !w.Hole.forces && !w.Hole.enters {
+	if !w.Hole.forces && !w.Hole.enters && b.Power&PowerPull == 0 { // (a pulled ball has forces of its own)
 		w.bounces(b, t, h, f)
 		return
 	}
@@ -370,10 +402,18 @@ func (w *World) advance(b *Ball, t, h float64, f *field, cut bool) (at float64, 
 		vs := w.Hole.surfaceVel(&c, p, end)
 		vn := v.sub(vs).dot(n)
 		isGround := n.Y > groundNY
+		sticky := b.Power&PowerSticky != 0
 		if isGround {
-			on = support{n, s.friction, vs}
+			fric := s.friction
+			if sticky {
+				fric *= stickyFric
+			}
+			on = support{n, fric, vs}
 		}
 		e := restitution(n, vn, s.bounce, s.e)
+		if sticky && isGround {
+			e = 0 // it lands and stays down
+		}
 		if vn < 0 && (e > 0 || s.kick > 0) && cut && c.depth > touchDepth {
 			w.Events = w.Events[:events]
 			return w.touch(b, t, h, f), true // too far past the surface for a bounce to be right here
@@ -429,7 +469,7 @@ func (w *World) advance(b *Ball, t, h float64, f *field, cut bool) (at float64, 
 	// Never on a moving ground: it is carried.
 	holds := stopped && slow && still && f.holds(on)
 	if holds || (b.restTimer >= restTime && still) || (b.movingTime > maxMovingTime && grounded && still) {
-		b.Rest, v = true, Vec3{}
+		b.Rest, v, b.Power = true, Vec3{}, 0 // a power lasts a shot
 	}
 	// wedged or carried, where the rest test cannot see it: it would never stop
 	b.Stuck = b.movingTime > maxMovingTime && (!grounded || !still)

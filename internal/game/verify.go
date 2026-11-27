@@ -426,7 +426,7 @@ func Verify(h *physics.Hole) Report {
 	r.Unknown = unknown()
 	r.Shots, r.Places, r.Faults = v.p.shots, len(v.places), v.faults()
 	for i := range h.Zones {
-		if z := &h.Zones[i]; z.ActsOnEntering() && v.p.acted&(1<<i) == 0 {
+		if z := &h.Zones[i]; z.ActsOnEntering() && v.p.acted&(1<<i) == 0 && (z.Stage == 0 || z.Stage == h.Stage) { // (a zone of another hole of its world: not this one's to reach)
 			r.Faults = append(r.Faults, Fault{Kind: ZoneUnused, Detail: fmt.Sprintf("zone %d %s: no shot of the %d made it act (out of reach, or never entered)", i, z.Type, v.p.shots), At: z.C})
 		}
 	}

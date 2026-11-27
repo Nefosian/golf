@@ -25,6 +25,11 @@ type golfer struct {
 	limit    int // of strokes, on this hole
 	finished bool
 	holedAt  int // frame
+
+	powersOn bool     // the room plays with powers (powers.go)
+	powers   [2]uint8 // in hand, powNone where there is none
+	armed    uint8    // the power the next shot carries
+	curse    uint8    // what the others' powers did to the next shot (curseWeight...)
 }
 
 // still says whether a ball stays as it is until another ball or a moving collider moves it.
@@ -82,6 +87,7 @@ type sim struct {
 	hole     *physics.Hole
 	limit    int  // of strokes, for every ball
 	solo     bool // the balls go through each other
+	powers   bool // the players have powers (powers.go)
 	world    *physics.World
 	seq      int          // of the hole: paths of a previous hole are ignored
 	balls    []*ball      // in the order of the room's members
@@ -97,8 +103,8 @@ type sim struct {
 	passed []event         // scratch of advance
 }
 
-func newSim(hole *physics.Hole, seq int, send func([]byte), limit int, solo bool) *sim {
-	return &sim{hole: hole, limit: limit, solo: solo, world: physics.NewWorld(hole), seq: seq, send: send}
+func newSim(hole *physics.Hole, seq int, send func([]byte), limit int, solo, powers bool) *sim {
+	return &sim{hole: hole, limit: limit, solo: solo, powers: powers, world: physics.NewWorld(hole), seq: seq, send: send}
 }
 
 func (s *sim) ball(id uint32) *ball {
@@ -112,7 +118,10 @@ func (s *sim) ball(id uint32) *ball {
 
 // add puts b on the tee, not shot yet: no ball goes any other way for it.
 func (s *sim) add(b *ball) {
-	g := golfer{ball: physics.NewBall(s.hole.Tee), limit: s.limit}
+	g := golfer{ball: physics.NewBall(s.hole.Tee), limit: s.limit, powersOn: s.powers}
+	if s.powers { // a power in hand on every hole
+		g.give(drawPower(s.now+s.seq*7919, b.id, 99))
+	}
 	s.world.Settle(&g.ball, s.now)
 	b.track.restart(s.now, g)
 	b.told, b.toldAt, b.flags = append(b.told[:0], see(&b.track.last)), s.now, 0
@@ -132,7 +141,8 @@ func (s *sim) shoot(b *ball, n int, dx, dz, power float64) bool {
 		return false
 	}
 	g.ball.Respawn = g.ball.P
-	g.ball.Shoot(dx, dz, power)
+	g.ball.Shoot(dx, dz, g.arm(power))
+	g.powered()
 	g.strokes++
 	b.track.restart(n, g)
 	s.replan(n, []*ball{b}, event{n, b.id, evShot, float32(min(1, power))})
@@ -179,7 +189,7 @@ func (s *sim) advance(n int) []event {
 
 // scoring says whether an event changes what the room shows of the players.
 func scoring(kind uint8) bool {
-	return kind == evHoled || kind == evMaxed || kind == evOut || kind == evStrokes
+	return kind == evHoled || kind == evMaxed || kind == evOut || kind == evStrokes || kind == evPowerGot
 }
 
 // rolling says whether a track goes further than what is known of it.
@@ -537,6 +547,16 @@ func record(w *physics.World, ev []event, jumps []physics.Vec3, k int, id uint32
 // checkpoint), in the cup, frozen, out of strokes.
 func rules(w *physics.World, g *golfer, k int, id uint32, ev []event) []event {
 	b, killY := &g.ball, w.Hole.KillY
+	if b.Gifts != 0 { // power boxes: a power each, drawn at random, while a hand is free
+		if g.powersOn && !g.finished {
+			for i := range b.Gifts {
+				if p := drawPower(k, id, i); g.give(p) {
+					ev = append(ev, event{k, id, evPowerGot, float32(p)})
+				}
+			}
+		}
+		b.Gifts = 0
+	}
 	if b.Strokes != 0 {
 		if !g.finished {
 			g.strokes = max(0, g.strokes+b.Strokes)

@@ -24,6 +24,7 @@ func init() {
 	register("magnet", func() Effect { return new(magnet) })
 	register("gravity", func() Effect { return new(gravity) })
 	register("vortex", func() Effect { return new(vortex) })
+	register("powerup", func() Effect { return new(powerup) })
 }
 
 // maxPush is the strongest acceleration a zone may add (u/s²): gravity is 18.
@@ -241,6 +242,17 @@ func (e *magnet) field(b *Ball, f field) field {
 		f.push = f.push.add(d.scale(e.Accel))
 	}
 	return f
+}
+
+// powerup is a power box: the game gives the player a power, drawn at random (internal/game/powers.go),
+// if its room plays with powers. Always once.
+type powerup struct{}
+
+func (*powerup) check(*Hole, *Zone) error { return nil }
+
+func (*powerup) enter(b *Ball) bool {
+	b.Gifts++
+	return true
 }
 
 // gravity is a field of low (or high) gravity: inside it, the ball falls with G (u/s²) instead of

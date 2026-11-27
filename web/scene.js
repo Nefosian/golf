@@ -22,32 +22,44 @@ const PALETTE = {
 };
 // toon shading: three flat tones (shade, middle, light); pale things get a softer ramp, or their
 // shade turns to dirty grey
-const ramp = values => {
+const ramp = (values, smooth = false) => {
   const t = new THREE.DataTexture(new Uint8Array(values), values.length, 1, THREE.RedFormat);
-  t.minFilter = t.magFilter = THREE.NearestFilter;
+  t.minFilter = t.magFilter = smooth ? THREE.LinearFilter : THREE.NearestFilter;
   t.needsUpdate = true;
   return t;
 };
-const tones = ramp([130, 200, 255]), softTones = ramp([205, 235, 255]);
+// (2026-11-25) blended rather than flat: the shapes read rounder, closer to real light, the ink
+// outlines keep the sticker style
+const tones = ramp([112, 140, 172, 205, 232, 250, 255], true), softTones = ramp([196, 212, 228, 242, 252, 255], true);
 const PALE = new Set([PALETTE.cream, PALETTE.white, PALETTE.sand]);
-const toon = (color, more) => new THREE.MeshToonMaterial({ color, gradientMap: PALE.has(color) ? softTones : tones, ...more });
-const INK_MAT = new THREE.MeshBasicMaterial({ color: PALETTE.ink });
-const HULL_MAT = new THREE.MeshBasicMaterial({ color: PALETTE.ink, side: THREE.BackSide }); // an outline around a plain shape
+// (2026-11-25) The realistic drawing: every surface is a physical material (it takes the light, the
+// shadows and the sky's reflection as a real one would); the ink outlines are gone (their meshes stay,
+// not drawn). toon keeps its name: it is the one place a plain material is made.
+const toon = (color, more) => new THREE.MeshStandardMaterial({ color, roughness: 0.82, metalness: 0, ...more });
+// how rough and how metallic a colour of the palette is, when it is not plain painted or natural matter
+const FINISH = { gold: { roughness: 0.3, metalness: 1 }, steel: { roughness: 0.38, metalness: 0.85 }, sun: { roughness: 0.55 }, red: { roughness: 0.6 },
+  cream: { roughness: 0.7 }, white: { roughness: 0.7 }, cloud: { roughness: 1 }, snow: { roughness: 0.95 }, neon: { roughness: 0.3, emissive: 0x2fb8c4, emissiveIntensity: 0.6 },
+  mint: { roughness: 0.15, metalness: 0.1 }, water: { roughness: 0.1 } };
+const INK_MAT = new THREE.MeshBasicMaterial({ color: PALETTE.ink, visible: false });
+const HULL_MAT = new THREE.MeshBasicMaterial({ color: PALETTE.ink, side: THREE.BackSide, visible: false }); // an outline around a plain shape: not drawn any more
 const HULL = 0.035; // how far an outline stands out of its shape
 // grass: mowed in diagonal bands, crossed more faintly, in course units, whatever floor it is on
-const grass = new THREE.MeshToonMaterial({ color: PALETTE.grass, gradientMap: (() => { const t = ramp([120, 150, 178, 204, 226, 244, 255]); t.minFilter = t.magFilter = THREE.LinearFilter; return t; })() }); // shaded softly: a slope shows by its light
+const grass = new THREE.MeshStandardMaterial({ color: PALETTE.grass, roughness: 0.92, metalness: 0, normalMap: turf(), normalScale: new THREE.Vector2(0.55, 0.55) });
 // Grass: mown in broad bands along the hole (tee to cup), with a soft unevenness, and lighter the
 // higher it is on the hole: a slope reads as a change of shade, a hollow as a darker green (GRASS:
 // set for each hole, see setHole).
-const GRASS = { along: { value: new THREE.Vector2(0, -1) }, low: { value: 0 }, high: { value: 1 } };
+const NO_CONTACT = new THREE.DataTexture(new Uint8Array([0, 0, 0, 0]), 1, 1);
+NO_CONTACT.needsUpdate = true;
+const GRASS = { along: { value: new THREE.Vector2(0, -1) }, low: { value: 0 }, high: { value: 1 },
+  contact: { value: NO_CONTACT }, contactArea: { value: new THREE.Vector4(0, 0, 1, 1) } };
 grass.onBeforeCompile = s => {
-  Object.assign(s.uniforms, { mowAlong: GRASS.along, mowLow: GRASS.low, mowHigh: GRASS.high });
+  Object.assign(s.uniforms, { mowAlong: GRASS.along, mowLow: GRASS.low, mowHigh: GRASS.high, contact: GRASS.contact, contactArea: GRASS.contactArea });
   s.vertexShader = s.vertexShader.replace('#include <common>', '#include <common>\nvarying vec3 vMow;\nvarying vec3 vUp;')
     .replace('#include <project_vertex>', '#include <project_vertex>\nvMow = (modelMatrix * vec4(transformed, 1.0)).xyz;\nvUp = normalize(mat3(modelMatrix) * objectNormal);');
   s.fragmentShader = s.fragmentShader.replace('#include <common>', `#include <common>
 varying vec3 vMow;
 varying vec3 vUp;
-uniform vec2 mowAlong; uniform float mowLow, mowHigh;
+uniform vec2 mowAlong; uniform float mowLow, mowHigh; uniform sampler2D contact; uniform vec4 contactArea;
 float mowHash(vec2 p) { return fract(sin(dot(p, vec2(127.1, 311.7))) * 43758.5453); }
 float mowNoise(vec2 p) { vec2 i = floor(p), f = fract(p); f = f * f * (3.0 - 2.0 * f);
   return mix(mix(mowHash(i), mowHash(i + vec2(1.0, 0.0)), f.x), mix(mowHash(i + vec2(0.0, 1.0)), mowHash(i + vec2(1.0, 1.0)), f.x), f.y); }`)
@@ -61,7 +73,19 @@ diffuseColor.rgb *= mix(vec3(0.76, 0.83, 0.79), vec3(1.0, 1.0, 0.93), smoothstep
 // a slope turned to the sun is lit, one turned away in its shade: much more than the light alone would
 // (the sun comes from -x, +z, see View)
 float facing = vUp.y > 0.2 ? dot(vUp.xz, normalize(vec2(-0.5, 0.4))) : 0.0;
-diffuseColor.rgb *= clamp(1.0 + 1.1 * facing, 0.7, 1.12);`);
+diffuseColor.rgb *= clamp(1.0 + 1.1 * facing, 0.7, 1.12);
+// a fine grain, like blades seen from afar
+float grain = mowNoise(vMow.xz * 7.0) * 0.55 + mowNoise(vMow.xz * 21.0 + 3.7) * 0.45;
+diffuseColor.rgb *= 0.95 + 0.1 * grain;
+float lumen = dot(diffuseColor.rgb, vec3(0.299, 0.587, 0.114));
+diffuseColor.rgb = mix(vec3(lumen), diffuseColor.rgb, 0.8) * 0.88;
+float dry = smoothstep(0.55, 0.85, mowNoise(vMow.xz * 0.09 + 13.0));
+diffuseColor.rgb = mix(diffuseColor.rgb, diffuseColor.rgb * vec3(1.12, 1.03, 0.72), dry * 0.4);
+// in the shade of the walls and posts close by (r: how much, g / r: the height of their foot), not of
+// those on another level
+vec4 near = texture2D(contact, (vMow.xz - contactArea.xy) / (contactArea.zw - contactArea.xy));
+float level = 1.0 - smoothstep(0.35, 0.8, abs(vMow.y - near.g / max(near.r, 1e-3)));
+diffuseColor.rgb *= 1.0 - 0.6 * smoothstep(0.0, 0.75, near.r) * level;`);
 };
 const MAT = {
   floor: grass, side: toon(PALETTE.lip), wall: toon(PALETTE.cream), wallSide: toon(PALETTE.sand), post: toon(PALETTE.post),
@@ -77,7 +101,7 @@ const wallFaces = [MAT.wallSide, MAT.wallSide, MAT.wall, MAT.wall, MAT.wallSide,
 // ---------------------------------------------------------------------------- props
 // The props are modelled in Blender (tools/models/kit.py) and come in one file. Each face names its
 // colour, a key of PALETTE; "ink" is the outline, a shell around the prop seen from inside.
-const PROP_MAT = Object.fromEntries(Object.entries(PALETTE).map(([k, c]) => [k, k === 'ink' ? INK_MAT : toon(c)]));
+const PROP_MAT = Object.fromEntries(Object.entries(PALETTE).map(([k, c]) => [k, k === 'ink' ? INK_MAT : toon(c, FINISH[k])]));
 const KIT = {}; // prop name -> its object, to clone
 for (const o of (await new GLTFLoader().loadAsync(new URL('./models/kit.glb', import.meta.url).href)).scene.children) {
   o.traverse(m => {
@@ -87,6 +111,7 @@ for (const o of (await new GLTFLoader().loadAsync(new URL('./models/kit.glb', im
   });
   o.traverse(m => { if (m.userData.ink) m.add(inkShell(m, m.userData.ink)); });
   o.traverse(m => { if (m.isMesh) m.userData.kit = true; });
+  o.traverse(m => { if (m.isMesh && !m.geometry.attributes.uv) boxUV(m.geometry, 1.2); });
   KIT[o.name] = o;
 }
 
@@ -181,24 +206,71 @@ const ring = (n, f) => Array.from({ length: n }, (_, i) => f(i * PI2 / n, i));
   craft('snowman', inked(S(0.5).translate(0, 0.45, 0), 'snow', 0.035), inked(S(0.36).translate(0, 1.18, 0), 'snow', 0.03), inked(S(0.26).translate(0, 1.7, 0), 'snow', 0.03),
     inked(new THREE.ConeGeometry(0.06, 0.3, 8).rotateX(Math.PI / 2).translate(0, 1.7, 0.36), 'carrot', 0.015),
     inked(C(0.2, 0.2, 0.28, 14).translate(0, 2.05, 0), 'dark', 0.02), inked(C(0.3, 0.3, 0.04, 16).translate(0, 1.92, 0), 'dark', 0.02),
-    ...[-0.09, 0.09].map(x => part(S(0.035, 6, 4).translate(x, 1.78, 0.23), 'ink')), part(new THREE.TorusGeometry(0.33, 0.06, 6, 16).rotateX(Math.PI / 2).translate(0, 1.47, 0), 'red'));
+    ...[-0.09, 0.09].map(x => part(S(0.035, 6, 4).translate(x, 1.78, 0.23), 'dark')), part(new THREE.TorusGeometry(0.33, 0.06, 6, 16).rotateX(Math.PI / 2).translate(0, 1.47, 0), 'red'));
   craft('xmas_tree', inked(C(0.12, 0.14, 0.5, 8).translate(0, 0.25, 0), 'wood', 0.02),
     ...[[0.95, 1, 0.9], [0.75, 0.9, 1.45], [0.52, 0.8, 1.95]].map(([r, h, y]) => inked(new THREE.ConeGeometry(r, h, 12).translate(0, y, 0), 'pine', 0.035)),
     inked(new THREE.OctahedronGeometry(0.18).translate(0, 2.45, 0), 'gold', 0.02),
     ...[[0.62, 0.75, 0], [0.45, 1.25, 2.1], [0.3, 1.8, 4.2], [0.7, 0.7, 3.3], [0.52, 1.3, 5.4], [0.65, 0.68, 1.3]].map(([r, y, a], i) => inked(S(0.08, 8, 6).translate(Math.cos(a) * r, y, Math.sin(a) * r), ['red', 'sun', 'pink', 'violet'][i % 4], 0.015)));
+  // the power box: a glossy violet cube with gold edges and a question mark on each side
+  {
+    const c = document.createElement('canvas'), n = c.width = c.height = 128, g = c.getContext('2d');
+    g.fillStyle = '#8b5cf6'; g.fillRect(0, 0, n, n);
+    g.strokeStyle = '#ffd23f'; g.lineWidth = 12; g.strokeRect(6, 6, n - 12, n - 12);
+    g.fillStyle = '#fff7e6'; g.font = '900 84px Nunito, system-ui, sans-serif'; g.textAlign = 'center'; g.textBaseline = 'middle'; g.fillText('?', n / 2, n / 2 + 4);
+    const map = new THREE.CanvasTexture(c); map.colorSpace = THREE.SRGBColorSpace;
+    craft('powerbox', part(B(0.46, 0.46, 0.46), 'white').translateY(0).rotateY(0.6));
+    KIT.powerbox.children[0].material = toon(0xffffff, { map, roughness: 0.3, emissive: 0x5b3fd6, emissiveIntensity: 0.35 });
+  }
+  // volcan: the cone far away, smoking, its crater aglow; a dead tree
+  {
+    const cone = new THREE.CylinderGeometry(1.6, 7, 6, 28, 4, true);
+    craft('volcano', part(cone.translate(0, 3, 0), 'earth2'), part(new THREE.CylinderGeometry(1.55, 1.55, 0.1, 24).translate(0, 5.95, 0), 'white'),
+      part(new THREE.CylinderGeometry(0.9, 1.4, 1.6, 12).translate(0, 7, 0), 'cloud'), part(S(1.3, 12, 8).translate(0.5, 8.4, 0.2), 'cloud'), part(S(1.7, 12, 8).translate(-0.3, 9.8, -0.2), 'cloud'));
+    KIT.volcano.children[1].material = new THREE.MeshBasicMaterial({ color: 0xff8a2a }); // the glow of the crater
+  }
+  craft('dead_tree', inked(C(0.09, 0.16, 1.8, 8).translate(0, 0.9, 0), 'wood'), ...[[0.7, 1.2, 0.5, 0.6], [-0.8, 1.45, -0.3, 0.5], [0.5, 1.65, -0.6, 0.45], [-0.4, 1.0, 0.7, 0.4]].map(([a, y, b, l]) =>
+    inked(C(0.03, 0.06, l, 6).translate(0, l / 2, 0).rotateZ(a).rotateY(b).translate(0, y, 0), 'wood', 0.015)));
+  // pirate: a palm (a leaning ringed trunk, fronds drooping all round), a treasure chest, a wreck, a gull
+  {
+    const trunk = [];
+    for (let i = 0; i < 7; i++) trunk.push(C(0.11 - i * 0.008, 0.13 - i * 0.008, 0.36, 10).translate(Math.sin(i / 7 * 1.2) * 0.35, 0.18 + i * 0.34, 0));
+    const fronds = ring(8, (a, i) => {
+      const f = new THREE.PlaneGeometry(1.3, 0.34, 6, 1), p = f.attributes.position;
+      for (let k = 0; k < p.count; k++) { const x = p.getX(k) + 0.65; p.setXYZ(k, x, -x * x * 0.45, p.getY(k) * (1 - x / 1.6)); }
+      f.computeVertexNormals();
+      return f.rotateY(a + (i % 2) * 0.2).translate(0.66, 2.45, 0);
+    });
+    const leaves = part(mergeGeometries(fronds), 'leaf'); leaves.material = PROP_MAT.leaf.clone(); leaves.material.side = THREE.DoubleSide; leaves.material.color.set(0x4f9a3a);
+    craft('palm', part(mergeGeometries(trunk), 'wood'), leaves, part(S(0.13, 8, 6).translate(0.6, 2.35, 0.1), 'earth2'), part(S(0.12, 8, 6).translate(0.72, 2.32, -0.1), 'earth2'));
+  }
+  craft('chest', inked(B(0.8, 0.45, 0.52).translate(0, 0.225, 0), 'wood', 0.025), inked(new THREE.CylinderGeometry(0.26, 0.26, 0.8, 12, 1, false, 0, Math.PI).rotateZ(Math.PI / 2).translate(0, 0.45, 0), 'wood', 0.025),
+    ...[-0.3, 0.3].map(x => part(B(0.06, 0.5, 0.54).translate(x, 0.25, 0), 'gold')), part(B(0.12, 0.14, 0.04).translate(0, 0.45, 0.27), 'gold'));
+  {
+    const hull = new THREE.LatheGeometry([[0, 0], [0.9, 0.05], [1.3, 0.6], [1.45, 1.4]].map(([x, y]) => new THREE.Vector2(x, y)), 18).scale(1, 1, 3.2).rotateZ(0.18);
+    const sail = new THREE.PlaneGeometry(1.8, 1.6, 4, 4), sp = sail.attributes.position;
+    for (let k = 0; k < sp.count; k++) sp.setZ(k, Math.sin(sp.getX(k) * 2) * 0.12 + (k % 3 === 0 ? 0.08 : 0));
+    const sails = part(sail.translate(0, 3.2, 0.2), 'cream'); sails.material = PROP_MAT.cream.clone(); sails.material.side = THREE.DoubleSide;
+    craft('ship', part(hull, 'wood'), part(C(0.08, 0.1, 4.5, 8).translate(0, 2.4, 0.4).rotateZ(0.18), 'wood'), part(C(0.07, 0.09, 3.6, 8).translate(0, 2, -1.8).rotateZ(0.12), 'wood'), sails);
+  }
+  {
+    const wing = new THREE.PlaneGeometry(0.9, 0.22).translate(0.45, 0, 0);
+    const w2 = wing.clone().rotateZ(0.35), w3 = wing.clone().rotateY(Math.PI).rotateZ(-0.35);
+    const wings = part(mergeGeometries([w2, w3]), 'white'); wings.material = PROP_MAT.white.clone(); wings.material.side = THREE.DoubleSide;
+    craft('gull', wings, part(S(0.12, 8, 6).scale(1, 0.8, 2.2), 'white'));
+  }
   // galaxie: a cluster of crystals, a ringed planet, a flying saucer
   craft('crystal', ...[[0, 0, 1, 0], [0.28, 0.1, 0.7, 0.4], [-0.25, -0.15, 0.6, -0.35]].map(([x, z, s, lean]) => inked(new THREE.OctahedronGeometry(0.28).scale(1, 2.4, 1).rotateZ(lean).translate(x, 0.55 * s, z).scale(s, s, s), 'tint', 0.025)));
   craft('planet', inked(S(1, 32, 20), 'tint', 0.03), inked(new THREE.TorusGeometry(1.65, 0.12, 6, 48).scale(1, 1, 0.35).rotateX(Math.PI / 2).rotateZ(0.35), 'cream', 0.025));
   // ferme: a duck, for the ponds (it swims like the sharks' fins: modelled heading +z)
   craft('duck', inked(S(0.26, 14, 10).scale(1, 0.75, 1.35).translate(0, 0.1, 0), 'cream', 0.025), inked(S(0.16, 12, 8).translate(0, 0.36, 0.26), 'cream', 0.02),
     inked(new THREE.ConeGeometry(0.07, 0.16, 8).rotateX(Math.PI / 2).translate(0, 0.34, 0.47), 'carrot', 0.012), inked(new THREE.ConeGeometry(0.1, 0.18, 6).rotateX(-Math.PI / 2 - 0.5).translate(0, 0.22, -0.36), 'cream', 0.015),
-    ...[-0.09, 0.09].map(x => part(S(0.03, 6, 4).translate(x, 0.41, 0.38), 'ink')));
+    ...[-0.09, 0.09].map(x => part(S(0.03, 6, 4).translate(x, 0.41, 0.38), 'dark')));
   craft('ufo', inked(S(1.2, 28, 12).scale(1, 0.26, 1), 'steel', 0.04), inked(new THREE.SphereGeometry(0.55, 20, 10, 0, PI2, 0, Math.PI / 2).translate(0, 0.2, 0), 'mint', 0.03),
     ...ring(8, a => part(S(0.09, 8, 6).translate(Math.cos(a) * 1.05, -0.02, Math.sin(a) * 1.05), 'sun')));
 }
 
 // the top of each prop over its origin, read from the models (what decor may reach depends on it)
-const TOP = Object.fromEntries(Object.entries(KIT).map(([k, o]) => [k, new THREE.Box3().setFromObject(o).max.y]));
+const TOP = {}; // (filled at the end of the file, once the realistic decor is made: see "the decor, realistic")
 // what zones show that is not a prop: the dots of a launcher's arc, the streaks of a wind, the
 // sparkles of a teleporter, a shadow under what floats
 const DOT = new THREE.SphereGeometry(0.045, 10, 6), DOT_INK = new THREE.SphereGeometry(0.045 + 0.02, 10, 6);
@@ -249,14 +321,26 @@ const DOWN = new THREE.Vector3(0, -1, 0), UP = new THREE.Vector3(0, 1, 0);
 // words and no signs: what a material or a zone does has to show in how it looks.
 const TILE = 1;
 const tiles = new Map();
-function tile(name, draw) {
+// grit: how much fine, per-pixel unevenness is laid over the tile once drawn (real matter is never flat);
+// size: its pixels (512 for the natural materials of the walls, seen close up)
+function tile(name, draw, { grit = 0.05, size = 256 } = {}) {
   if (!tiles.has(name)) {
-    const canvas = document.createElement('canvas'), n = canvas.width = canvas.height = 256, g = canvas.getContext('2d');
+    const canvas = document.createElement('canvas'), n = canvas.width = canvas.height = size, g = canvas.getContext('2d');
     let seed = 7;
     const rand = () => (seed = (seed * 16807) % 2147483647) / 2147483647; // the same tile every time
     // spread draws a shape at x, y and wherever it crosses the edge of the tile, so that it repeats
     const spread = (x, y, r, shape) => { for (const dx of [-n, 0, n]) for (const dy of [-n, 0, n]) if (Math.abs(x + dx - n / 2) < n / 2 + r && Math.abs(y + dy - n / 2) < n / 2 + r) shape(x + dx, y + dy); };
     draw(g, n, rand, spread);
+    if (grit > 0) { // fine noise, and a slow mottling, both tiling
+      const img = g.getImageData(0, 0, n, n), d = img.data;
+      for (let i = 0; i < d.length; i += 4) {
+        const p = i / 4, x = p % n, y = (p / n) | 0;
+        const mottle = Math.sin(x / n * TAU * 3 + Math.sin(y / n * TAU * 2) * 1.3) * Math.sin(y / n * TAU * 3 + 0.7) * 0.5;
+        const k = 1 + (rand() - 0.5) * 2 * grit + mottle * grit;
+        d[i] = Math.min(255, d[i] * k); d[i + 1] = Math.min(255, d[i + 1] * k); d[i + 2] = Math.min(255, d[i + 2] * k);
+      }
+      g.putImageData(img, 0, 0);
+    }
     const t = new THREE.CanvasTexture(canvas);
     t.wrapS = t.wrapT = THREE.RepeatWrapping;
     t.colorSpace = THREE.SRGBColorSpace;
@@ -266,7 +350,11 @@ function tile(name, draw) {
   return tiles.get(name);
 }
 const fill = (g, n, color) => { g.fillStyle = color; g.fillRect(0, 0, n, n); };
+// shade lightens (k > 0) or darkens a colour: '#rrggbb' in, '#rrggbb' out
+const shade = (color, k) => { const c = new THREE.Color(color); c.lerp(new THREE.Color(k > 0 ? 0xffffff : 0x000000), Math.abs(k)); return '#' + c.getHexString(); };
 const blob = (g, x, y, r, color) => { g.fillStyle = color; g.beginPath(); g.arc(x, y, r, 0, TAU); g.fill(); };
+// GRAIN is the matter of a plain surface (a wall's top, a post): pale, uneven, multiplied by its colour
+const GRAIN = () => tile('grain', (g, n) => fill(g, n, '#f2f2f2'), { grit: 0.09 });
 // the tiles; the top of the canvas is the way a directed zone points
 const LOOK = {
   // the surfaces, flat and bold like the rest: two or three tones, big round shapes, no noise
@@ -287,6 +375,15 @@ const LOOK = {
     }
   }),
   // sand: yellow, big soft dots, a few pale ones
+  // obsidian (volcan, the ice of a volcano: it slides the same): black glass, long cold shines
+  obsidian: () => tile('obsidian', (g, n) => {
+    fill(g, n, '#15121a');
+    g.lineCap = 'round';
+    for (const [x0, w, a] of [[0.15, 60, 0.14], [0.55, 26, 0.1], [0.8, 10, 0.2]]) {
+      g.strokeStyle = `rgba(150,140,200,${a})`; g.lineWidth = w;
+      for (const dx of [-n, 0, n]) { g.beginPath(); g.moveTo(n * x0 + dx - n * 0.3, n); g.lineTo(n * x0 + dx + n * 0.3, 0); g.stroke(); }
+    }
+  }),
   // mud (ferme): brown, darker puddles, a few pale clods
   mud: () => tile('mud', (g, n, rand, spread) => {
     fill(g, n, '#9a6a3f');
@@ -392,16 +489,16 @@ const POST_FACES = [toon(0xffffff, { map: LOOK.post() }), MAT.wall, MAT.wall];
 // stand out on grass. From the third on, a key shares its colour with something else.
 const KEY_COLOR = ['#3fa7ff', '#ff6b3f', '#8ac926', '#9b5de5', '#2ec4b6', '#f15bb5', '#adb5bd', '#ffc300'];
 const surfaces = new Map();
-let sandLook = 'sand'; // how the hole drawn shows sand: its theme's (setHole)
+let sandLook = 'sand', iceLook = 'ice'; // how the hole drawn shows sand and ice: its theme's (setHole)
 function surface(c) {
-  const name = c.key ? `key ${c.key}` : c.motion ? `moving ${c.material ?? ''}` : c.material === 'sand' ? sandLook : c.material;
+  const name = c.key ? `key ${c.key}` : c.motion ? `moving ${c.material ?? ''}` : c.material === 'sand' ? sandLook : c.material === 'ice' ? iceLook : c.material;
   if (!name || name === 'grass' || name === 'wall' || name === 'post') return null;
   if (!surfaces.has(name)) {
     surfaces.set(name, c.key
       ? toon(0xffffff, { map: LOOK.gate(c.key), transparent: true, opacity: 0.85 }) // a gate, in the colour of its key
       : c.motion && !SURFACE[c.material]
         ? toon(0xffffff, { map: LOOK.tape() }) // what moves stands out
-        : toon(0xffffff, { map: (c.material === 'sand' ? LOOK[sandLook] : SURFACE[c.material])?.() ?? LOOK.tape() }));
+        : toon(0xffffff, { map: (c.material === 'sand' ? LOOK[sandLook] : c.material === 'ice' ? LOOK[iceLook] : SURFACE[c.material])?.() ?? LOOK.tape(), roughness: c.material === 'ice' ? 0.12 : 0.82 })); // ice shines
   }
   return surfaces.get(name);
 }
@@ -411,18 +508,38 @@ function surface(c) {
 // it stands on, the grass, its plain walls and posts (their sides, their tops and what crowns them),
 // and the decor around it. What plays keeps its colours everywhere; nothing here changes the game.
 const lum = c => { const k = new THREE.Color(c); return 0.2126 * k.r + 0.7152 * k.g + 0.0722 * k.b; };
-const themeToon = (color, more) => new THREE.MeshToonMaterial({ color, gradientMap: lum(color) > 0.45 ? softTones : tones, ...more }); // pale: a soft shade
+const themeToon = (color, more) => toon(color, more);
 // the sides of the walls: tiles of 1 unit, seamless both ways (their UVs are in course units)
 const SIDE = {
   ribs: (base, rib) => tile('ribs ' + base, (g, n) => { fill(g, n, base); g.fillStyle = rib; for (let i = 0; i < 4; i++) g.fillRect(i * n / 4 + n / 8 - 5, 0, 10, n); }),
-  logs: (base, joint, light) => tile('logs ' + base, (g, n) => {
-    fill(g, n, base);
-    for (let i = 0; i < 4; i++) { const y = i * n / 4; g.fillStyle = light; g.fillRect(0, y + 12, n, 14); g.fillStyle = joint; g.fillRect(0, y, n, 7); }
-  }),
-  planks: (base, joint, nail) => tile('planks ' + base, (g, n) => {
-    fill(g, n, base);
-    for (let i = 0; i < 4; i++) { const x = i * n / 4; g.fillStyle = joint; g.fillRect(x, 0, 6, n); for (const y of [0.22, 0.72]) blob(g, x + n / 8 + 3, y * n, 6, nail); }
-  }),
+  // logs laid flat: each round (light along its middle, dark at its edges), bark streaks along it
+  logs: (base, joint, light) => tile('logs ' + base, (g, n, rand) => {
+    fill(g, n, joint);
+    for (let i = 0; i < 4; i++) {
+      const y = i * n / 4, h = n / 4 - 6, grad = g.createLinearGradient(0, y + 3, 0, y + 3 + h);
+      grad.addColorStop(0, joint); grad.addColorStop(0.35, light); grad.addColorStop(0.6, base); grad.addColorStop(1, joint);
+      g.fillStyle = grad; g.fillRect(0, y + 3, n, h);
+      g.strokeStyle = shade(joint, -0.2); g.lineWidth = 1.5;
+      for (let s = 0; s < 14; s++) { const yy = y + 6 + rand() * (h - 6), x0 = rand() * n; g.beginPath(); g.moveTo(x0, yy); g.lineTo(x0 + 20 + rand() * 60, yy + (rand() - 0.5) * 3); g.stroke(); }
+    }
+  }, { grit: 0.1, size: 512 }),
+  // boards on end: each with its own shade, the grain running along it in waves and knots, dark gaps, nail heads
+  planks: (base, joint, nail) => tile('planks ' + base, (g, n, rand) => {
+    fill(g, n, joint);
+    for (let i = 0; i < 4; i++) {
+      const x = i * n / 4, w = n / 4 - 5;
+      g.fillStyle = shade(base, (rand() - 0.5) * 0.18); g.fillRect(x + 5, 0, w, n);
+      g.strokeStyle = shade(base, -0.22); g.lineWidth = 1.2;
+      for (let s = 0; s < 9; s++) {
+        const x0 = x + 8 + rand() * (w - 6), a = 2 + rand() * 4, f = 2 + rand() * 3, ph = rand() * TAU;
+        g.beginPath();
+        for (let y = 0; y <= n; y += 8) g.lineTo(x0 + Math.sin(y / n * TAU * f / 2 + ph) * a, y); // whole waves: it tiles
+        g.stroke();
+      }
+      const ky = rand() * n; g.fillStyle = shade(base, -0.3); g.beginPath(); g.ellipse(x + 5 + w * (0.3 + rand() * 0.4), ky, 4, 9, 0, 0, TAU); g.fill();
+      for (const y of [0.22, 0.72]) { blob(g, x + n / 8 + 3, y * n, 6, shade(nail, -0.3)); blob(g, x + n / 8 + 2, y * n - 1, 4, nail); }
+    }
+  }, { grit: 0.08, size: 512 }),
   strata: (base, light, dark) => tile('strata ' + base, (g, n) => {
     fill(g, n, base);
     for (const [y0, w, c] of [[0.12, 26, light], [0.46, 14, dark], [0.68, 34, light], [0.9, 10, dark]]) {
@@ -432,25 +549,37 @@ const SIDE = {
       g.fill();
     }
   }),
-  stone: (joint, base, light, dark) => tile('stone ' + base, (g, n, rand) => { // 0.5 x 0.25, in a running bond
-    fill(g, n, joint);
+  // dressed stone, 0.5 x 0.25 in a running bond: each block its own shade, lit on top, shaded below, chipped
+  stone: (joint, base, light, dark) => tile('stone ' + base, (g, n, rand) => {
+    fill(g, n, shade(joint, -0.15));
     for (let row = 0; row < 4; row++) for (let k = -1; k < 2; k++) {
-      const x = k * n / 2 + (row % 2) * n / 4, y = row * n / 4, c = [base, base, light, dark][Math.floor(rand() * 4)];
-      g.fillStyle = c; g.fillRect(x + 4, y + 4, n / 2 - 8, n / 4 - 8);
+      const x = k * n / 2 + (row % 2) * n / 4 + 6, y = row * n / 4 + 6, w = n / 2 - 12, h = n / 4 - 12, c = [base, base, light, dark][Math.floor(rand() * 4)];
+      const grad = g.createLinearGradient(0, y, 0, y + h);
+      grad.addColorStop(0, shade(c, 0.12)); grad.addColorStop(0.5, c); grad.addColorStop(1, shade(c, -0.18));
+      g.fillStyle = grad; g.beginPath(); g.roundRect(x, y, w, h, 7); g.fill();
+      for (let s = 0; s < 5; s++) blob(g, x + rand() * w, y + rand() * h, 2 + rand() * 4, shade(c, -0.12 - rand() * 0.1));
     }
-  }),
+  }, { grit: 0.12, size: 512 }),
+  // a clipped hedge: hundreds of small leaves of every green, deep shadow between them
   leaves: (base, mid, light) => tile('leaves ' + base, (g, n, rand, spread) => {
-    fill(g, n, base);
-    for (let i = 0; i < 26; i++) { const r = 15 + rand() * 11; spread(rand() * n, rand() * n, r, (x, y) => blob(g, x, y, r, mid)); }
-    for (let i = 0; i < 14; i++) { const r = 10 + rand() * 8; spread(rand() * n, rand() * n, r, (x, y) => blob(g, x, y, r, light)); }
-  }),
-  brick: (joint, base, a, b) => tile('brick ' + base, (g, n, rand) => { // 0.25 x 0.125
-    fill(g, n, joint);
-    for (let row = 0; row < 8; row++) for (let k = -1; k < 5; k++) {
-      const x = k * n / 4 + (row % 2) * n / 8, y = row * n / 8;
-      g.fillStyle = [base, base, a, b][Math.floor(rand() * 4)]; g.fillRect(x + 3, y + 3, n / 4 - 6, n / 8 - 6);
+    fill(g, n, shade(base, -0.35));
+    const greens = [shade(base, -0.15), base, mid, mid, light, shade(light, 0.12)];
+    for (let i = 0; i < 2400; i++) {
+      const r = 5 + rand() * 7, a = rand() * TAU, c = greens[Math.floor(rand() * greens.length)];
+      spread(rand() * n, rand() * n, r * 1.6, (x, y) => { g.fillStyle = c; g.beginPath(); g.ellipse(x, y, r * 1.5, r * 0.7, a, 0, TAU); g.fill(); });
     }
-  }),
+  }, { grit: 0.14, size: 512 }),
+  // bricks, 0.25 x 0.125: each one its own red, darker at its edges, the mortar set back
+  brick: (joint, base, a, b) => tile('brick ' + base, (g, n, rand) => {
+    fill(g, n, shade(joint, -0.12));
+    for (let row = 0; row < 8; row++) for (let k = -1; k < 5; k++) {
+      const x = k * n / 4 + (row % 2) * n / 8 + 4, y = row * n / 8 + 4, w = n / 4 - 8, h = n / 8 - 8, c = shade([base, base, a, b][Math.floor(rand() * 4)], (rand() - 0.5) * 0.15);
+      const grad = g.createLinearGradient(0, y, 0, y + h);
+      grad.addColorStop(0, shade(c, 0.08)); grad.addColorStop(1, shade(c, -0.15));
+      g.fillStyle = grad; g.fillRect(x, y, w, h);
+      for (let s = 0; s < 6; s++) blob(g, x + rand() * w, y + rand() * h, 1.5 + rand() * 2.5, shade(c, -0.2));
+    }
+  }, { grit: 0.12, size: 512 }),
   post: (base, band) => tile('post ' + base + band, (g, n) => { fill(g, n, base); g.fillStyle = band; g.fillRect(0, n * 0.3, n, n * 0.4); }),
   // a fairground booth: broad upright stripes, in turn
   stripes: (...colors) => tile('stripes ' + colors.join(), (g, n) => { colors.forEach((c, i) => { g.fillStyle = c; g.fillRect(i * n / colors.length, 0, n / colors.length, n); }); }),
@@ -481,13 +610,15 @@ const CROWN = {
   chateau: { rail: { piece: w => new THREE.BoxGeometry(0.3, 0.1, w).translate(0, 0.05, 0), step: 0.6 }, post: r => new THREE.ConeGeometry(r + 0.03, Math.min(0.4 * r, 0.1), 24).translate(0, Math.min(0.4 * r, 0.1) / 2, 0) },
   banquise: { rail: { rod: 0.08, r: w => Math.min(0.11, w / 2 + 0.03) }, post: r => dome(r, 0.1) },
   nuit: { rail: { piece: () => dome(0.09, 0.09), step: 0.6 }, post: r => dome(r, 0.08), glow: true },
+  volcan: { rail: { rod: 0.04, r: () => 0.05 }, post: r => dome(r * 0.6, 0.06), glow: true }, // a vein of lava along the top of the basalt
+  pirate: { rail: { slab: 0.06 }, post: r => dome(r, 0.08) },
   fete: { rail: { piece: () => dome(0.085, 0.085), step: 0.45 }, post: r => new THREE.ConeGeometry(r + 0.03, 0.1, 24).translate(0, 0.05, 0), glow: true }, // a row of bulbs, a bulb roof on a post
   ferme: { rail: { slab: 0.06 }, post: r => dome(r, 0.08) },
   galaxie: { rail: { rod: 0.05, r: () => 0.06 }, post: r => dome(r * 0.7, 0.08), glow: true }, // a line of neon
   noel: { rail: { rod: 0.1, r: w => Math.min(0.12, w / 2 + 0.03) }, post: r => dome(r + 0.02, 0.1) }, // snow on top
 };
 const THEMES = {
-  bocage: { sky: '#5cc4e8', horizon: '#fff2d6', below: '#8fd0e8', grass: '#7ddb6b', lip: '#49b65c', skirt: ['#49b65c', '#b07a4f', '#8a5a3c'], top: '#175f3d', side: () => SIDE.leaves('#124f33', '#175f3d', '#1f7a4c'), crownColor: '#175f3d', clouds: 1, mill: true, fence: true,
+  bocage: { crownIsSide: true, sky: '#5cc4e8', horizon: '#fff2d6', below: '#8fd0e8', grass: '#7ddb6b', lip: '#49b65c', skirt: ['#49b65c', '#b07a4f', '#8a5a3c'], top: '#175f3d', side: () => SIDE.leaves('#124f33', '#175f3d', '#1f7a4c'), crownColor: '#175f3d', clouds: 1, mill: true, fence: true,
     near: [['bush', 1], [['rock_a', 'rock_b'], 1], ['flower', 1], ['flower', 1.1], ['mushroom', 1]], trees: [['tree_ball', 1], ['tree_blossom', 1]], under: [['bush', 1], ['bush', 0.9], ['flower', 1], ['flower', 1], ['flower', 1.1]] },
   ville: { sky: '#7fb0e6', horizon: '#ffdcc4', below: '#f3b0c0', grass: '#6fd36a', lip: '#3fae5a', skirt: ['#3fae5a', '#b8644a', '#8f4a36'], top: '#fff7e6', side: () => SIDE.brick('#e8d5ac', '#b8644a', '#a85840', '#c9755a'), post: () => SIDE.post('#2b3a36', '#fff7e6'), crownColor: '#fff7e6', clouds: 1, fence: true,
     recolor: { earth: '#b8644a', earth2: '#8f4a36', cloud: '#ffe6ea' }, balloons: ['#e63946', '#ffd23f', '#3fa7ff'],
@@ -510,6 +641,17 @@ const THEMES = {
   // The festive ones (2026-11-25). Same rules: what plays keeps its colours. Besides the kit, they
   // have props of their own (craft), a landmark far away instead of the windmill, things that fly
   // instead of the balloons (flyer), something falling through the air (fall), a nebula in the sky.
+  // volcan (2026-11-26): the slopes of a volcano: basalt walls cracked with lava, ash grass, lava
+  // where the water would be and as a sea under the course, embers rising, the cone smoking far away
+  volcan: { swimmer: 'none', ice: 'obsidian', sky: '#2e2024', horizon: '#c4562c', below: '#ff5a1a', sea: true, grass: '#7f9a52', lip: '#4b5a34', skirt: ['#4b5a34', '#3a302c', '#221a18'], top: '#3a3230', side: () => SIDE.stone('#1c1716', '#3b3331', '#4a403c', '#2e2826'), crownColor: '#ff7a2a', clouds: 0.6, landmark: ['volcano'],
+    lava: { deep: '#8a1606', mid: '#ff4a12', light: '#ffd166', foam: '#fff1a6' }, recolor: { leaf: '#5d6b3c', earth: '#3a302c', earth2: '#221a18', stone: '#3b3331', wood: '#2a1f1a', cloud: '#6a5650' }, balloons: [],
+    tints: ['#ff7a2a', '#ffb347', '#ff4a12', '#ffd166'], fall: { kind: 'embers', n: 220 },
+    near: [[['rock_a', 'rock_b'], 1], ['dead_tree', 0.5], ['rock_c', 0.6]], trees: [['dead_tree', 1], ['dead_tree', 1.2], ['rock_c', 2]], under: [['rock_b', 1], ['rock_a', 0.8]] },
+  // pirate (2026-11-26): a treasure island: sand and palms, weathered planks, a turquoise sea, a wreck
+  // offshore, gulls, the power boxes are treasure chests
+  pirate: { box: 'chest', flyer: 'gull', sky: '#47bff0', horizon: '#fff2cf', below: '#16a7c4', sea: true, grass: '#86d25a', lip: '#55a23a', skirt: ['#f0d398', '#d4aa66', '#a07c48'], top: '#c9955f', side: () => SIDE.planks('#a87445', '#5e3d22', '#2e2418'), post: () => SIDE.post('#7a5232', '#e9d2a3'), postTop: '#c9955f', crownColor: '#c9955f', clouds: 0.7, fence: true, landmark: ['ship'],
+    recolor: { leaf: '#efd59b', earth: '#d4aa66', earth2: '#a07c48', cloud: '#ffffff' }, balloons: [0, 0, 0],
+    near: [['palm', 0.55], [['rock_a', 'rock_b'], 1], ['chest', 0.8], ['palm', 0.45]], trees: [['palm', 1], ['palm', 1.15], ['palm', 0.9]], under: [['rock_c', 0.8], ['rock_b', 1], ['chest', 1]] },
   // fete: a fairground at dusk: booth stripes, a row of bulbs on every wall, a circus tent and a big
   // wheel, lollipops and presents on the islets, confetti
   fete: { sky: '#ff9ec7', horizon: '#ffe6a8', below: '#ffc2dc', grass: '#72d86a', lip: '#43b25a', skirt: ['#43b25a', '#ffd23f', '#ff8a1f'], top: '#fff7e6', side: () => SIDE.stripes('#c81d3a', '#fff7e6'), post: () => SIDE.post('#3fa7ff', '#fff7e6'), crownColor: '#ffe27a', clouds: 1, fence: true,
@@ -541,21 +683,24 @@ function dress(name) {
   name = THEMES[name] ? name : 'bocage';
   if (dressed.has(name)) return dressed.get(name);
   const t = THEMES[name], col = c => new THREE.Color(c);
-  const side = t.side ? themeToon(0xffffff, { map: t.side() }) : themeToon(t.top), top = themeToon(t.top);
-  const swaps = new Map(Object.entries(t.recolor ?? {}).map(([k, c]) => [PROP_MAT[k], themeToon(c)]));
+  const side = t.side ? themeToon(0xffffff, { map: t.side(), bumpMap: t.side(), bumpScale: 2.5, roughness: 0.88 }) : themeToon(t.top, { map: GRAIN(), bumpMap: GRAIN(), bumpScale: 1 }), top = themeToon(t.top, { map: GRAIN(), bumpMap: GRAIN(), bumpScale: 1 });
+  const recolor = { ...(t.recolor?.leaf ? { turf: t.recolor.leaf } : {}), ...t.recolor }; // the islets' turf goes with the leaves
+  const swaps = new Map(Object.entries(recolor).map(([k, c]) => { const m = PROP_MAT[k].clone(); m.color.set(c); return [PROP_MAT[k], m]; }));
   let below;
-  if (t.sea) { // the sea under the course: waves, running
-    const map = LOOK.water().clone();
-    map.repeat.set(600, 600);
-    below = new THREE.MeshBasicMaterial({ map, color: col(t.below).lerp(new THREE.Color(0xffffff), 0.35) });
+  if (t.sea) { // the sea under the course: a live sea, swells and glints (SEA)
+    below = SEA.clone();
+    below.uniforms.time = WATER.uniforms.time; // the clock of every water
+    below.uniforms.deep.value = col(t.below).multiplyScalar(0.55);
+    below.uniforms.mid.value = col(t.below);
+    below.uniforms.light.value = col(t.below).lerp(new THREE.Color(0xffffff), 0.75);
   } else below = new THREE.MeshBasicMaterial({ color: t.below });
-  const how = CROWN[name], crownMat = how?.glow ? new THREE.MeshBasicMaterial({ color: t.crownColor }) : themeToon(t.crownColor ?? t.top);
+  const how = CROWN[name], crownMat = how?.glow ? new THREE.MeshBasicMaterial({ color: t.crownColor }) : t.crownIsSide ? side : themeToon(t.crownColor ?? t.top, { map: GRAIN(), bumpMap: GRAIN(), bumpScale: 1 }); // a hedge is leaves on top too
   const postCrownMat = t.postCrown ? themeToon(t.postCrown) : crownMat;
   const T = {
     name, sky: col(t.sky), horizon: col(t.horizon), below, sea: !!t.sea, stars: !!t.stars, grass: col(t.grass), lip: themeToon(t.lip),
-    skirt: t.skirt.map(c => themeToon(c)), clouds: t.clouds, floes: !!t.floes, mill: !!t.mill, fence: !!t.fence, balloons: t.balloons,
+    skirt: t.skirt.map((c, i) => themeToon(c, i ? { map: i === 1 ? MATTER.earth() : MATTER.rock(), bumpMap: i === 1 ? MATTER.earth() : MATTER.rock(), bumpScale: 3, roughness: 0.95 } : {})), clouds: t.clouds, floes: !!t.floes, mill: !!t.mill, fence: !!t.fence, balloons: t.balloons,
     near: t.near, trees: t.trees, under: t.under,
-    swimmer: t.swimmer, sand: t.sand ?? 'sand', landmark: t.landmark ?? [], flyer: t.flyer ?? 'balloon', planets: t.planets ?? [], cloudNames: t.cloudNames ?? ['cloud_a', 'cloud_b', 'cloud_c'], tints: t.tints, fall: t.fall, nebula: !!t.nebula,
+    swimmer: t.swimmer, sand: t.sand ?? 'sand', ice: t.ice ?? 'ice', lava: t.lava, box: t.box, landmark: t.landmark ?? [], flyer: t.flyer ?? 'balloon', planets: t.planets ?? [], cloudNames: t.cloudNames ?? ['cloud_a', 'cloud_b', 'cloud_c'], tints: t.tints, fall: t.fall, nebula: !!t.nebula,
     wall: [side, side, top, top, side, side],
     post: [t.post ? themeToon(0xffffff, { map: t.post() }) : side, t.postTop ? themeToon(t.postTop) : top, top],
     recolor: m => swaps.get(m) ?? m, // a prop's colour in the decor: the theme's
@@ -590,7 +735,7 @@ const WORDS = {
   hazard: () => t('hazard'), checkpoint: () => t('checkpoint'), strokes: p => t('bonus', -p.add),
   key: p => t('key', p.key), wind: (p, z) => t(thin(z) ? 'conveyor' : 'wind', num(Math.hypot(...p.accel))),
   magnet: p => p.accel > 0 ? t('magnet', p.accel) : t('repeller', -p.accel),
-  gravity: p => t('gravity', num(p.g)), vortex: () => t('vortex'),
+  gravity: p => t('gravity', num(p.g)), vortex: () => t('vortex'), powerup: () => t('powerup'),
 };
 export const describe = zone => ({ text: (WORDS[zone.type] ?? (() => zone.type))(zone.params ?? {}, zone) });
 // GROUND gives the look of the ground of a zone, from its params: its tile, the way it points
@@ -617,6 +762,7 @@ const GROUND = {
   magnet: p => ({ map: LOOK.rings(p.accel > 0 ? '#e63946' : '#1f3fa6'), round: true, run: p.accel / 6, scale: 0.5 }), // red rings running in, or navy running out
   gravity: () => ({ map: LOOK.antigrav(), run: -0.15 }), // starry indigo, and stars rising slowly through it (zoneProps)
   vortex: () => ({ map: LOOK.vortex(), whole: true }), // an accretion swirl, turning the way it turns the ball (zone)
+  powerup: () => ({ map: LOOK.burst('#9b5de5'), whole: true }), // a violet burst under the power box that floats over it
 };
 
 // decal gives a flat geometry lying at y 0 around the origin texture coordinates along dir (x, z),
@@ -642,6 +788,56 @@ function decal(geometry, look, size = TILE) {
   }
   return geometry;
 }
+
+// turf is the normal map of mown grass, a tile of a unit: thousands of short blades, leaning every
+// way, their relief blurred a little (made once, for every grass floor)
+function turf() {
+  const n = 256, h = new Float32Array(n * n);
+  let seed = 11;
+  const rand = () => (seed = (seed * 16807) % 2147483647) / 2147483647;
+  for (let b = 0; b < 5200; b++) {
+    const x0 = rand() * n, y0 = rand() * n, a = rand() * Math.PI * 2, len = 3 + rand() * 7, lift = 0.4 + rand() * 0.6;
+    for (let s = 0; s <= len; s++) {
+      const x = Math.floor(x0 + Math.cos(a) * s + n) % n, y = Math.floor(y0 + Math.sin(a) * s + n) % n;
+      h[y * n + x] = Math.max(h[y * n + x], lift * (1 - s / len * 0.5));
+    }
+  }
+  const at = (x, y) => h[((y + n) % n) * n + ((x + n) % n)], data = new Uint8Array(n * n * 4);
+  for (let y = 0; y < n; y++) for (let x = 0; x < n; x++) {
+    const dx = (at(x + 1, y) - at(x - 1, y)) * 1.4, dy = (at(x, y + 1) - at(x, y - 1)) * 1.4, l = Math.hypot(dx, dy, 1);
+    data.set([(-dx / l * 0.5 + 0.5) * 255, (-dy / l * 0.5 + 0.5) * 255, (1 / l * 0.5 + 0.5) * 255, 255], (y * n + x) * 4);
+  }
+  const t = new THREE.DataTexture(data, n, n);
+  t.wrapS = t.wrapT = THREE.RepeatWrapping;
+  t.magFilter = THREE.LinearFilter;
+  t.minFilter = THREE.LinearMipmapLinearFilter;
+  t.generateMipmaps = true;
+  t.anisotropy = 4;
+  t.needsUpdate = true;
+  return t;
+}
+
+// DIMPLES is the normal map of a golf ball: rows of round dimples, staggered (a tile, repeated round it)
+const DIMPLES = (() => {
+  const n = 64, data = new Uint8Array(n * n * 4), r = 0.42;
+  for (let y = 0; y < n; y++) for (let x = 0; x < n; x++) {
+    let nx = 0, ny = 0;
+    for (const [cx, cy] of [[0.25, 0.25], [0.75, 0.75], [-0.25, 0.75], [1.25, 0.25], [0.25, 1.25], [0.75, -0.25]]) {
+      const dx = (x + 0.5) / n * 2 - cx * 2, dy = (y + 0.5) / n * 2 - cy * 2, d = Math.hypot(dx, dy);
+      if (d < r) { const k = Math.sin(d / r * Math.PI) * 1.6; nx = -dx / d * k * 0.5; ny = -dy / d * k * 0.5; }
+    }
+    const l = Math.hypot(nx, ny, 1), i = (y * n + x) * 4;
+    data.set([(nx / l * 0.5 + 0.5) * 255, (ny / l * 0.5 + 0.5) * 255, (1 / l * 0.5 + 0.5) * 255, 255], i);
+  }
+  const t = new THREE.DataTexture(data, n, n);
+  t.wrapS = t.wrapT = THREE.RepeatWrapping;
+  t.repeat.set(10, 5);
+  t.magFilter = THREE.LinearFilter;
+  t.minFilter = THREE.LinearMipmapLinearFilter;
+  t.generateMipmaps = true;
+  t.needsUpdate = true;
+  return t;
+})();
 
 // label is a sign that always faces the camera: the name over a ball.
 function label(text, color) {
@@ -673,10 +869,13 @@ export class View {
   constructor(canvas, size) {
     this.size = size;
     this.renderer = new THREE.WebGLRenderer({ canvas, antialias: true });
+    this.renderer.toneMapping = THREE.NeutralToneMapping; // highlights roll off, the hues stay true
+    this.renderer.toneMappingExposure = 0.95;
+    this.pmrem = new THREE.PMREMGenerator(this.renderer);
     this.scene = new THREE.Scene();
     this.camera = new THREE.PerspectiveCamera(55, 1, 0.1, 600);
     this.target = new THREE.Vector3(); // what the camera looks at (look)
-    const sun = this.sun = new THREE.DirectionalLight(0xffffff, 2.2);
+    const sun = this.sun = new THREE.DirectionalLight(0xfff2dc, 2.3); // (2026-11-25) a warm sun, a cool sky, the grass's green bounce
     sun.position.set(-0.5, 0.85, 0.4);
     // shadows: what stands on the course (walls, props, balls) shades the ground, the light fitted to
     // the hole (setHole)
@@ -688,8 +887,9 @@ export class View {
     sun.shadow.normalBias = 0.03;
     this.below = new THREE.Mesh(flat(new THREE.PlaneGeometry(2400, 2400)), MAT.below); // where a ball out of bounds falls
     this.dome = sky();
-    this.scene.add(new THREE.HemisphereLight(0xffffff, 0xb8d8c8, 1.3), sun, sun.target, this.below, this.dome);
-    this.scene.fog = new THREE.Fog(PALETTE.horizon, 80, 300);
+    this.scene.add(new THREE.HemisphereLight(0xeef6ff, 0x8fae7f, 0.55), sun, sun.target, this.below, this.dome);
+    sun.intensity = 2.8;
+    this.scene.fog = new THREE.Fog(PALETTE.horizon, 45, 260); // the distance hazes over, as in the open air
     this.balls = new Map(); // player id -> mesh
     this.tags = new Map();  // player id -> { sprite, key }: the name over a ball
     this.moving = [];       // { mesh, c, rot, motion }: the colliders that move
@@ -754,14 +954,22 @@ export class View {
     this.ballShadow ??= flat(new THREE.CircleGeometry(1, 20));
     const g = this.course = new THREE.Group();
     const T = this.theme = dress(hole.theme);
-    sandLook = T.sand;
+    sandLook = T.sand; iceLook = T.ice;
     this.dome.material.uniforms.top.value.copy(T.sky);
     this.dome.material.uniforms.low.value.copy(T.horizon);
     this.dome.material.uniforms.stars.value = T.stars ? 1 : 0;
     this.dome.material.uniforms.nebula.value = T.nebula ? 1 : 0;
+    // the sky, blurred, lights and is reflected by everything (made once a theme)
+    if (this.envOf !== T.name) {
+      const sky = new THREE.Scene(), dome = new THREE.Mesh(this.dome.geometry, this.dome.material);
+      sky.add(dome);
+      this.scene.environment?.dispose();
+      this.scene.environment = this.pmrem.fromScene(sky, 0.04, 0.1, 1000).texture;
+      this.scene.environmentIntensity = T.stars ? 0.3 : 0.5;
+      this.envOf = T.name;
+    }
     this.scene.fog?.color.copy(T.horizon); // (the previews draw without fog)
     this.below.material = T.below;
-    if (T.sea) this.scrolling.push({ texture: T.below.map, speed: 0.03 });
     grass.color.copy(T.grass); // one hole at a time: the grass is the theme's
     const laid = [], walls = []; // the floors and the plain walls that stay put: merged (floorMeshes, wallMeshes)
     for (const c of hole.colliders) {
@@ -803,6 +1011,10 @@ export class View {
       g.add(mesh);
     }
     for (const m of floorMeshes(laid, T.lip)) { g.add(m); this.floors.push(m); }
+    this.contact?.target.dispose();
+    this.contact = bakeContact(hole, this.renderer);
+    GRASS.contact.value = this.contact?.target.texture ?? NO_CONTACT;
+    if (this.contact) GRASS.contactArea.value.set(...this.contact.area);
     for (const m of wallMeshes(walls, hole.colliders, T)) g.add(m);
     (hole.zones ?? []).forEach(z => g.add(this.zone(z)));
     const box = new THREE.Box3().setFromObject(g);
@@ -820,6 +1032,13 @@ export class View {
     const [tx, ty, tz] = hole.tee, tee = prop('tee');
     tee.position.set(tx, ty - hole.ballR, tz);
     g.add(pin, rim, tee);
+    const white = new Map([[PROP_MAT.red, PROP_MAT.cream]]);
+    for (const [fx, fy, fz] of hole.flags ?? []) { // the other holes of its world: a white flag where each cup is
+      const other = recolor(prop('flag'), white);
+      other.position.set(fx, fy, fz);
+      other.scale.setScalar(0.8);
+      g.add(other);
+    }
 
     this.below.position.y = hole.killY;
     this.scene.add(g);
@@ -855,7 +1074,7 @@ export class View {
     this.sails = [];
     const T = this.theme;
     d.add(skirt(hole.colliders, hole.killY - 1, T.skirt));
-    let seed = [...hole.name].reduce((h, c) => Math.imul(h ^ c.charCodeAt(0), 16777619), 2166136261) ^ hole.colliders.length;
+    let seed = [...(hole.world || hole.name)].reduce((h, c) => Math.imul(h ^ c.charCodeAt(0), 16777619), 2166136261) ^ hole.colliders.length;
     const rand = () => { seed = Math.imul(seed ^ (seed >>> 15), 1 | seed) + 0x6d2b79f5 | 0; return ((seed ^ (seed >>> 14)) >>> 0) / 4294967296; };
     const pick = list => list[Math.floor(rand() * list.length)];
     // the footprint of the course: the outline of each floor seen from above, and their lowest top
@@ -877,6 +1096,7 @@ export class View {
       return m;
     };
     const taken = []; // [x, z, r]: the islets placed
+    const puffs = []; // [x, y, z, size]: the clouds, drawn soft
     const spot = (gap0, gap1, r) => { // a free place gap0 to gap1 from the course for an islet of radius r: out of the edge of a floor
       for (let tries = 0; tries < 60; tries++) {
         const [x0, x1, z0, z1] = pick(rects), a = rand() * TAU, hx = (x1 - x0) / 2, hz = (z1 - z0) / 2;
@@ -936,8 +1156,9 @@ export class View {
       this.sails.push(mill.getObjectByName('windmill_sails'));
     }
     for (const name of T.landmark) { // a barn, a big wheel, a circus tent, a great fir: on an islet of its own
-      const [lx, lz] = far(40, 65), o = prop(name), ly = floor - 2;
-      put('islet_l', lx, ly, lz, 1.3);
+      const [lx, lz] = far(40, 65), o = prop(name), ly = T.sea ? hole.killY + 0.25 : floor - 2;
+      if (!T.sea) put('islet_l', lx, ly, lz, 1.3); // over a sea, it stands in it (a wreck, a volcano in its lava)
+      if (name === 'volcano') o.scale.setScalar(3.2);
       o.position.set(lx, ly, lz);
       o.rotation.y = Math.atan2(cx - lx, cz - lz); // its front (+z) towards the course
       if (name === 'xmas_tree') o.scale.setScalar(4);
@@ -963,9 +1184,12 @@ export class View {
       const x = cx + gx + (rand() - 0.5) * 16, z = cz + gz + (rand() - 0.5) * 16, s = 1.2 + rand() ** 2 * 3.3, name = pick(T.cloudNames);
       if (rand() > T.clouds) continue; // fewer clouds in some skies
       const gap = gapAt(x, z) - 2.2 * s;
-      const m = put(name, x, Math.min(hole.killY - 0.1 * s, ceiling(Math.max(gap, 0)) - TOP[name] * s), z, s);
+      const y = Math.min(hole.killY - 0.1 * s, ceiling(Math.max(gap, 0)) - TOP[name] * s);
+      if (!T.floes && name.startsWith('cloud')) { puffs.push([x, y + TOP[name] * s * 0.45, z, s]); continue; } // soft, drawn as puffs (below)
+      const m = put(name, x, y, z, s);
       if (T.floes) m.scale(new THREE.Vector3(1, 0.3, 1)); // flattened: ice floes on the sea
     }
+    if (puffs.length) d.add(cloudPuffs(puffs, T.recolor(PROP_MAT.cloud).color, this.scene.fog));
     for (const [name, list] of many) {
       const model = KIT[name];
       model.updateMatrixWorld(true);
@@ -985,7 +1209,7 @@ export class View {
     // snow or confetti falling round the course (not in the lighter graphics: see move)
     this.falling = null;
     if (T.fall) {
-      const snow = T.fall.kind === 'snow', n = T.fall.n, top = floor + 12, height = 16, wide = reach + 10;
+      const snow = T.fall.kind !== 'confetti', n = T.fall.n, top = floor + 12, height = 16, wide = reach + 10; // snow and embers are motes
       const shape = snow ? new THREE.IcosahedronGeometry(0.055, 0) : new THREE.PlaneGeometry(0.12, 0.07);
       const mesh = new THREE.InstancedMesh(shape, new THREE.MeshBasicMaterial({ color: 0xffffff, side: THREE.DoubleSide }), n);
       mesh.frustumCulled = false;
@@ -993,9 +1217,9 @@ export class View {
         const a = rand() * TAU, r = Math.sqrt(rand()) * wide;
         return { x: cx + Math.cos(a) * r, z: cz + Math.sin(a) * r, y0: rand() * height, phase: rand() * TAU };
       });
-      if (!snow) items.forEach((_, k) => mesh.setColorAt(k, new THREE.Color(pick(T.tints))));
+      if (T.fall.kind !== 'snow') items.forEach((_, k) => mesh.setColorAt(k, new THREE.Color(pick(T.tints))));
       d.add(mesh);
-      this.falling = { mesh, items, top, height, speed: snow ? 0.7 : 1.1, spin: snow ? 0.5 : 3 };
+      this.falling = { mesh, items, top, height, speed: T.fall.kind === 'embers' ? -0.9 : snow ? 0.7 : 1.1, spin: snow ? 0.5 : 3 }; // embers rise
     }
     this.scene.add(d);
   }
@@ -1015,7 +1239,7 @@ export class View {
       const water = z.type === 'hazard', field = z.type === 'gravity'; // alive (waterOf), its foam for a rim; a field: faint, no rim
       const map = water ? null : look.map.clone(); // its own, to run at its own pace
       const top = new THREE.Mesh(water ? shape(0) : decal(shape(0), look, TILE * (look.scale ?? 1)),
-        water ? waterOf(z, this.hole.zones, this.renderer) : toon(0xffffff, { map, polygonOffset: true, polygonOffsetFactor: -2, polygonOffsetUnits: -4, ...(field ? { transparent: true, opacity: 0.32, depthWrite: false } : {}) }));
+        water ? waterOf(z, this.hole.zones, this.renderer, this.theme.lava) : toon(0xffffff, { map, polygonOffset: true, polygonOffsetFactor: -2, polygonOffsetUnits: -4, ...(field ? { transparent: true, opacity: 0.32, depthWrite: false } : {}) }));
       top.userData.own = true;
       top.position.y = floor + 0.012; // the zones of the maps start on the ground
       if (look.run && !water) this.scrolling.push({ texture: map, speed: look.run });
@@ -1050,6 +1274,7 @@ export class View {
       this.spinning.push({ o, y: floor + h, phase: this.spinning.length * 1.7 });
     };
     if (z.type === 'strokes') float(prop('bonus'), 0.7, true); // its number towards the camera
+    else if (z.type === 'powerup') float(prop(this.theme.box ?? 'powerbox'), 0.72); // a mystery box (a chest...), turning
     else if (z.type === 'key') float(prop('key', KEY_COLOR[p.key - 1]), 0.7);
     else if (z.type === 'jumppad') this.jumppad(z, group, floor);
     else if (z.type === 'launcher') {
@@ -1187,6 +1412,7 @@ export class View {
   // sharks are fins circling in a hazard: the water bites. One per 6 square units or so, up to three;
   // none in a puddle too small to swim round.
   sharks(z, group, floor) {
+    if (this.theme.swimmer === 'none') return; // (lava)
     const w = z.shape === BOX ? z.h[0] : z.r, d = z.shape === BOX ? z.h[2] : z.r;
     if (Math.min(w, d) < 0.6) return;
     const area = w * d * 4, n = area > 30 ? 2 : area > 5 ? 1 : 0; // a fin here and there, not a crowd
@@ -1346,9 +1572,9 @@ export class View {
     for (const b of balls.values()) {
       let mesh = this.balls.get(b.id);
       if (!mesh) {
-        this.balls.set(b.id, mesh = new THREE.Mesh(this.ballShape, toon(0xffffff, { transparent: true })));
+        this.balls.set(b.id, mesh = new THREE.Mesh(this.ballShape, new THREE.MeshPhysicalMaterial({ color: 0xffffff, roughness: 0.42, clearcoat: 1, clearcoatRoughness: 0.12, normalMap: DIMPLES, normalScale: new THREE.Vector2(0.8, 0.8), transparent: true })));
         mesh.castShadow = true;
-        mesh.add(new THREE.Mesh(this.ballHull, new THREE.MeshBasicMaterial({ color: PALETTE.ink, side: THREE.BackSide, transparent: true })));
+        mesh.add(new THREE.Mesh(this.ballHull, new THREE.MeshBasicMaterial({ color: PALETTE.ink, side: THREE.BackSide, transparent: true, visible: false }))); // (its outline: not drawn any more)
         mesh.userData.shadow = new THREE.Mesh(this.ballShadow, new THREE.MeshBasicMaterial({ color: PALETTE.ink, transparent: true, opacity: 0.18, depthWrite: false }));
         mesh.userData.shadow.scale.setScalar(this.ballShape.parameters.radius * 1.1);
         this.scene.add(mesh, mesh.userData.shadow);
@@ -1824,7 +2050,7 @@ function skirt(colliders, bottom, faces = [MAT.side, MAT.earth, MAT.rock]) {
         const pb = v(p.x, Math.min(bottom, pe.y), p.z), rb = v(r.x, Math.min(bottom, re.y), r.z);
         tri(bands[2], pe, re, rb); tri(bands[2], pe, rb, pb);
         // a scallop of grass hanging from the edge, just out of the earth
-        const depth = 0.16 + wave(p.z, p.x) * 0.14, arc = [];
+        const depth = 0.04 + wave(p.z, p.x) * 0.05, arc = []; // (2026-11-25) a short overhang of turf, no longer scallops
         for (let j = 0; j <= 4; j++) {
           const s = j / 4, c = p.clone().lerp(r, s).add(push);
           arc.push(c.setY(c.y - Math.sin(s * Math.PI) * depth));
@@ -1839,7 +2065,7 @@ function skirt(colliders, bottom, faces = [MAT.side, MAT.earth, MAT.rock]) {
   geometry.setAttribute('position', new THREE.Float32BufferAttribute(bands.flat(), 3));
   let start = 0;
   bands.forEach((list, i) => { geometry.addGroup(start, list.length / 3, i); start += list.length / 3; });
-  geometry.computeVertexNormals();
+  boxUV(geometry, 1.6); // (its normals too) so that the earth and the rock show their matter
   return new THREE.Mesh(geometry, faces);
 }
 
@@ -1918,14 +2144,44 @@ void main() {
   float lap = d - (0.06 + 0.22 * wobble);
   c = mix(c, foam, (1.0 - smoothstep(0.0, 0.035, lap)) * (0.55 + 0.45 * smoothstep(0.3, 0.6, wobble))); // foam lapping at the shore
   gl_FragColor = vec4(c, 1.0);
+  #include <tonemapping_fragment>
   #include <colorspace_fragment>
+}`,
+});
+// SEA is the open sea under a course of the quai: broad swells of deep and lighter blue drifting, small
+// ripples catching the sun, fading into the fog with distance
+const SEA = new THREE.ShaderMaterial({
+  fog: true,
+  uniforms: THREE.UniformsUtils.merge([THREE.UniformsLib.fog, { time: { value: 0 }, deep: { value: new THREE.Color() }, mid: { value: new THREE.Color() }, light: { value: new THREE.Color() } }]),
+  vertexShader: `#include <common>
+#include <fog_pars_vertex>
+varying vec2 w;
+void main() { vec4 p = modelMatrix * vec4(position, 1.0); w = p.xz; vec4 mvPosition = viewMatrix * p; gl_Position = projectionMatrix * mvPosition;
+#include <fog_vertex>
+}`,
+  fragmentShader: `#include <common>
+#include <fog_pars_fragment>
+uniform float time; uniform vec3 deep, mid, light; varying vec2 w;
+float h(vec2 p) { return fract(sin(dot(p, vec2(127.1, 311.7))) * 43758.5453); }
+float n(vec2 p) { vec2 i = floor(p), f = fract(p); f = f * f * (3.0 - 2.0 * f);
+  return mix(mix(h(i), h(i + vec2(1.0, 0.0)), f.x), mix(h(i + vec2(0.0, 1.0)), h(i + vec2(1.0, 1.0)), f.x), f.y); }
+void main() {
+  float swell = n(w * 0.06 + vec2(time * 0.02, time * 0.015)) * 0.6 + n(w * 0.17 - vec2(time * 0.03, -time * 0.02)) * 0.4;
+  vec3 c = mix(deep, mid, smoothstep(0.25, 0.85, swell));
+  float ripple = n(w * 3.1 + vec2(time * 0.6, time * 0.35)) * n(w * 2.6 - vec2(time * 0.35, -time * 0.5));
+  c = mix(c, light, smoothstep(0.66, 0.76, ripple) * 0.35);
+  gl_FragColor = vec4(c, 1.0);
+  #include <tonemapping_fragment>
+  #include <colorspace_fragment>
+  #include <fog_fragment>
 }`,
 });
 // waterOf gives the water of the pool of hazard zone z (its outline, the pools around it), among zones,
 // its shore drawn by renderer. Its texture goes with it (userData.shore).
-function waterOf(z, zones, renderer) {
+function waterOf(z, zones, renderer, colors) {
   const m = WATER.clone();
   m.uniforms.time = WATER.uniforms.time; // one clock for every pool
+  if (colors) for (const k of ['deep', 'mid', 'light', 'foam']) m.uniforms[k].value = new THREE.Color(colors[k]); // lava, say
   const rect = o => o.shape === BOX ? [o.c[0] - o.h[0], o.c[2] - o.h[2], o.c[0] + o.h[0], o.c[2] + o.h[2]] : [o.c[0] - o.r, o.c[2] - o.r, o.c[0] + o.r, o.c[2] + o.r];
   const u = SHORE.material.uniforms;
   if (z.shape === BOX) { u.round.value = 0; u.box.value.set(...rect(z)); }
@@ -1948,19 +2204,81 @@ function waterOf(z, zones, renderer) {
   return m;
 }
 
+// bakeContact draws, once per hole, the shade the walls and posts that stay put cast on the grass at
+// their foot: their footprint seen from above, blurred (r: how much), with the height of their foot
+// weighted the same way (g / r: that height), so that a wall shades its own level only, not a floor
+// under a bridge. The grass reads it (GRASS.contact): nothing to pay per frame but one texture read.
+const CONTACT_PX = 6; // pixels per unit of the course
+function bakeContact(hole, renderer) {
+  const standing = hole.colliders.filter(c => c.kind !== FLOOR && !c.motion && !c.key), floors = hole.colliders.filter(c => c.kind === FLOOR);
+  if (!standing.length || !floors.length) return null;
+  let x0 = Infinity, z0 = Infinity, x1 = -Infinity, z1 = -Infinity;
+  for (const c of floors) {
+    const r = c.shape === BOX ? Math.hypot(c.h[0], c.h[2]) : c.r;
+    x0 = Math.min(x0, c.c[0] - r); x1 = Math.max(x1, c.c[0] + r); z0 = Math.min(z0, c.c[2] - r); z1 = Math.max(z1, c.c[2] + r);
+  }
+  const area = [x0 - 1, z0 - 1, x1 + 1, z1 + 1], w = Math.min(1024, Math.ceil((area[2] - area[0]) * CONTACT_PX)), h = Math.min(1024, Math.ceil((area[3] - area[1]) * CONTACT_PX));
+  const opts = { type: THREE.HalfFloatType, depthBuffer: false, minFilter: THREE.LinearFilter, magFilter: THREE.LinearFilter };
+  const a = new THREE.WebGLRenderTarget(w, h, opts), b = new THREE.WebGLRenderTarget(w, h, opts);
+  const scene = new THREE.Scene(), made = [];
+  const vertexShader = 'uniform vec4 area; void main() { vec4 p = modelMatrix * vec4(position, 1.0); gl_Position = vec4((p.x - area.x) / (area.z - area.x) * 2.0 - 1.0, (p.z - area.y) / (area.w - area.y) * 2.0 - 1.0, 0.0, 1.0); }';
+  for (const c of standing) {
+    const geometry = c.shape === BOX ? new THREE.BoxGeometry(c.h[0] * 2, c.h[1] * 2, c.h[2] * 2) : new THREE.CylinderGeometry(c.r, c.r, c.hh * 2, 16);
+    const foot = c.c[1] - (c.shape === BOX ? c.h[1] : c.hh) + 0.15; // walls and posts are sunk 0.15 into their floor
+    const material = new THREE.ShaderMaterial({ uniforms: { area: { value: new THREE.Vector4(...area) }, foot: { value: foot } }, depthTest: false, depthWrite: false, vertexShader,
+      fragmentShader: 'uniform float foot; void main() { gl_FragColor = vec4(1.0, foot, 0.0, 1.0); }' });
+    const mesh = new THREE.Mesh(geometry, material);
+    mesh.position.set(...c.c);
+    mesh.rotation.set(...(c.rot ?? [0, 0, 0]));
+    mesh.frustumCulled = false; // (the shader places it, not the camera)
+    scene.add(mesh);
+    made.push(geometry, material);
+  }
+  const old = renderer.getClearColor(new THREE.Color()), oldAlpha = renderer.getClearAlpha(), camera = new THREE.Camera();
+  renderer.setClearColor(0x000000, 0);
+  renderer.setRenderTarget(a);
+  renderer.clear();
+  renderer.render(scene, camera);
+  // blurred both ways, a Gaussian of 9 taps 2.6 pixels apart: the shade reaches about a unit out
+  const blur = new THREE.ShaderMaterial({ uniforms: { src: { value: null }, step: { value: new THREE.Vector2() } }, depthTest: false, depthWrite: false,
+    vertexShader: 'varying vec2 uv0; void main() { uv0 = uv; gl_Position = vec4(position.xy, 0.0, 1.0); }',
+    fragmentShader: `uniform sampler2D src; uniform vec2 step; varying vec2 uv0;
+void main() {
+  float w[5] = float[5](0.227, 0.194, 0.122, 0.054, 0.016);
+  vec4 s = texture2D(src, uv0) * w[0];
+  for (int i = 1; i < 5; i++) s += (texture2D(src, uv0 + step * float(i)) + texture2D(src, uv0 - step * float(i))) * w[i];
+  gl_FragColor = s;
+}` });
+  const quad = new THREE.Mesh(new THREE.PlaneGeometry(2, 2), blur), flatScene = new THREE.Scene().add(quad);
+  quad.frustumCulled = false;
+  for (const [from, to, step] of [[a, b, [2.6 / w, 0]], [b, a, [0, 2.6 / h]]]) {
+    blur.uniforms.src.value = from.texture;
+    blur.uniforms.step.value.set(...step);
+    renderer.setRenderTarget(to);
+    renderer.clear();
+    renderer.render(flatScene, camera);
+  }
+  renderer.setRenderTarget(null);
+  renderer.setClearColor(old, oldAlpha);
+  for (const o of [...made, quad.geometry, blur, b]) o.dispose();
+  return { target: a, area };
+}
+
 // sky is a dome around everything: blue overhead, fading to a warm horizon.
 function sky() {
   const dome = new THREE.Mesh(new THREE.SphereGeometry(500, 24, 12), new THREE.ShaderMaterial({
     side: THREE.BackSide, depthWrite: false, fog: false,
-    uniforms: { top: { value: new THREE.Color(PALETTE.sky) }, low: { value: new THREE.Color(PALETTE.horizon) }, stars: { value: 0 }, nebula: { value: 0 } },
+    uniforms: { top: { value: new THREE.Color(PALETTE.sky) }, low: { value: new THREE.Color(PALETTE.horizon) }, stars: { value: 0 }, nebula: { value: 0 }, sun: { value: new THREE.Vector3(-0.5, 0.85, 0.4).normalize() } },
     vertexShader: 'varying vec3 d; void main() { d = normalize(position); gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0); }',
-    fragmentShader: `uniform vec3 top, low; uniform float stars, nebula; varying vec3 d;
+    fragmentShader: `uniform vec3 top, low, sun; uniform float stars, nebula; varying vec3 d;
 float hh(vec3 p) { return fract(sin(dot(p, vec3(12.9898, 78.233, 37.719))) * 43758.5453); }
 float vn(vec3 p) { vec3 i = floor(p), f = fract(p); f = f * f * (3.0 - 2.0 * f);
   return mix(mix(mix(hh(i), hh(i + vec3(1, 0, 0)), f.x), mix(hh(i + vec3(0, 1, 0)), hh(i + vec3(1, 1, 0)), f.x), f.y),
     mix(mix(hh(i + vec3(0, 0, 1)), hh(i + vec3(1, 0, 1)), f.x), mix(hh(i + vec3(0, 1, 1)), hh(i + vec3(1, 1, 1)), f.x), f.y), f.z); }
 void main() {
   vec3 c = mix(low, top, smoothstep(-0.02, 0.2, d.y));
+  float toSun = max(dot(normalize(d), sun), 0.0); // the sun, its glow, a haze along the horizon
+  c += (1.0 - stars) * (vec3(1.0, 0.92, 0.75) * (smoothstep(0.9993, 0.9997, toSun) * 0.9 + pow(toSun, 10.0) * 0.18) + low * 0.08 * (1.0 - smoothstep(0.0, 0.25, abs(d.y))));
   if (nebula > 0.0) { // clouds of violet and teal gas across the sky
     float a = vn(d * 3.0) * 0.6 + vn(d * 7.0 + 3.1) * 0.4, b = vn(d * 4.0 + 5.0) * 0.7 + vn(d * 9.0) * 0.3;
     c += (vec3(0.5, 0.12, 0.55) * smoothstep(0.5, 0.85, a) + vec3(0.08, 0.4, 0.55) * smoothstep(0.58, 0.9, b)) * smoothstep(-0.05, 0.3, d.y);
@@ -1968,12 +2286,193 @@ void main() {
   vec3 cell = floor(d * 160.0);
   float star = step(0.9965 - 0.004 * nebula, fract(sin(dot(cell, vec3(12.9898, 78.233, 37.719))) * 43758.5453)) * smoothstep(0.08, 0.35, d.y); // a few, high in the sky
   gl_FragColor = vec4(mix(c, vec3(1.0, 0.97, 0.88), star * stars), 1.0);
+  #include <tonemapping_fragment>
   #include <colorspace_fragment>
 }`,
   }));
   dome.renderOrder = -10;
   dome.onBeforeRender = (r, s, camera) => dome.position.copy(camera.position);
   return dome;
+}
+
+// ---------------------------------------------------------------------------- the decor, realistic
+// (2026-11-25) The trees, bushes and rocks are made here instead of taken from the kit: crowns of
+// lumpy clumps of leaves, a tapered trunk in bark, boulders with uneven faces. The natural colours
+// of the palette get their matter (a texture in greys that their colour tints): leaves, bark, rock,
+// earth. Each model is a few meshes (one per material): the decor draws them instanced.
+// boxUV gives a geometry texture coordinates from its shape (a box projection, k units a tile)
+function boxUV(geometry, k) {
+  const p = geometry.attributes.position, uv = new Float32Array(p.count * 2);
+  geometry.computeVertexNormals();
+  const nr = geometry.attributes.normal;
+  for (let i = 0; i < p.count; i++) {
+    const x = p.getX(i), y = p.getY(i), z = p.getZ(i), ax = Math.abs(nr.getX(i)), ay = Math.abs(nr.getY(i)), az = Math.abs(nr.getZ(i));
+    const [u, v] = ay >= ax && ay >= az ? [x, z] : ax >= az ? [z, y] : [x, y];
+    uv[i * 2] = u / k; uv[i * 2 + 1] = v / k;
+  }
+  geometry.setAttribute('uv', new THREE.BufferAttribute(uv, 2));
+  return geometry;
+}
+const hash3 = (x, y, z) => { const s = Math.sin(x * 127.1 + y * 311.7 + z * 74.7) * 43758.5453; return s - Math.floor(s); };
+function noise3(x, y, z) {
+  const xi = Math.floor(x), yi = Math.floor(y), zi = Math.floor(z), f = v => v * v * (3 - 2 * v), u = f(x - xi), v = f(y - yi), w = f(z - zi);
+  const L = (a, b, t) => a + (b - a) * t, h = (i, j, k) => hash3(xi + i, yi + j, zi + k);
+  return L(L(L(h(0, 0, 0), h(1, 0, 0), u), L(h(0, 1, 0), h(1, 1, 0), u), v), L(L(h(0, 0, 1), h(1, 0, 1), u), L(h(0, 1, 1), h(1, 1, 1), u), v), w);
+}
+// lumpy pushes every point of a closed shape in or out along its normal by an uneven amount: a clump of
+// leaves, a boulder. The seams of the shape are welded first, or it would crack open.
+function lumpy(geometry, amount, freq, seed) {
+  let g = geometry.index ? geometry.toNonIndexed() : geometry;
+  g.deleteAttribute('uv'); g.deleteAttribute('normal');
+  g = mergeVertices(g, 1e-4);
+  g.computeVertexNormals();
+  const p = g.attributes.position, n = g.attributes.normal;
+  for (let i = 0; i < p.count; i++) {
+    const x = p.getX(i), y = p.getY(i), z = p.getZ(i);
+    const d = (noise3(x * freq + seed, y * freq, z * freq) * 0.65 + noise3(x * freq * 2.7, y * freq * 2.7 + seed, z * freq * 2.7) * 0.35 - 0.5) * 2 * amount;
+    p.setXYZ(i, x + n.getX(i) * d, y + n.getY(i) * d, z + n.getZ(i) * d);
+  }
+  g.computeVertexNormals();
+  return g;
+}
+// matter: tiles in greys, that the colour of the material tints
+const MATTER = {
+  leaves: () => tile('matter leaves', (g, n, rand, spread) => {
+    fill(g, n, '#3c3c3c');
+    const greys = ['#6a6a6a', '#8a8a8a', '#a8a8a8', '#c4c4c4', '#dcdcdc', '#f0f0f0'];
+    for (let i = 0; i < 1500; i++) { const r = 4 + rand() * 6, a = rand() * TAU, c = greys[Math.floor(rand() * greys.length)]; spread(rand() * n, rand() * n, r * 1.6, (x, y) => { g.fillStyle = c; g.beginPath(); g.ellipse(x, y, r * 1.5, r * 0.65, a, 0, TAU); g.fill(); }); }
+  }, { grit: 0.12 }),
+  bark: () => tile('matter bark', (g, n, rand) => {
+    fill(g, n, '#b8b8b8');
+    for (let i = 0; i < 70; i++) { const x = rand() * n, w = 2 + rand() * 5; g.fillStyle = rand() < 0.5 ? '#7a7a7a' : '#e4e4e4'; g.beginPath(); for (let y = -10; y <= n + 10; y += 16) g.lineTo(x + Math.sin(y * 0.05 + i) * 3, y); for (let y = n + 10; y >= -10; y -= 16) g.lineTo(x + w + Math.sin(y * 0.05 + i) * 3, y); g.fill(); }
+  }, { grit: 0.15 }),
+  rock: () => tile('matter rock', (g, n, rand, spread) => {
+    fill(g, n, '#c8c8c8');
+    for (let i = 0; i < 320; i++) { const r = 2 + rand() * 9, c = ['#9c9c9c', '#b4b4b4', '#d4d4d4', '#e4e4e4'][Math.floor(rand() * 4)]; spread(rand() * n, rand() * n, r, (x, y) => { g.fillStyle = c; g.beginPath(); g.ellipse(x, y, r * 1.8, r, 0, 0, TAU); g.fill(); }); } // grains and flakes, laid flat as in a bed of rock
+    g.strokeStyle = '#808080'; g.lineWidth = 1.5;
+    for (let i = 0; i < 9; i++) { let x = rand() * n, y = rand() * n; g.beginPath(); g.moveTo(x, y); for (let k = 0; k < 5; k++) { x += (rand() - 0.5) * 50; y += (rand() - 0.5) * 50; g.lineTo(x, y); } g.stroke(); }
+  }, { grit: 0.2 }),
+  earth: () => tile('matter earth', (g, n, rand, spread) => {
+    fill(g, n, '#c4c4c4');
+    for (let i = 0; i < 160; i++) { const r = 2 + rand() * 7, c = ['#9a9a9a', '#b0b0b0', '#dadada', '#ececec'][Math.floor(rand() * 4)]; spread(rand() * n, rand() * n, r, (x, y) => blob(g, x, y, r, c)); }
+  }, { grit: 0.18 }),
+};
+// the natural colours of the palette take their matter, in relief
+for (const [keys, matter, rough] of [[['leaf', 'leaf2', 'pink'], 'leaves', 0.85], [['wood', 'earth', 'earth2'], 'bark', 0.9], [['stone'], 'rock', 0.92]]) {
+  for (const k of keys) Object.assign(PROP_MAT[k], { map: MATTER[matter](), bumpMap: MATTER[matter](), bumpScale: 3, roughness: rough });
+}
+Object.assign(PROP_MAT.earth, { map: MATTER.earth(), bumpMap: MATTER.earth() }); Object.assign(PROP_MAT.earth2, { map: MATTER.rock(), bumpMap: MATTER.rock() });
+for (const k of ['leaf', 'leaf2', 'pink', 'wood', 'earth', 'earth2', 'stone']) PROP_MAT[k].needsUpdate = true;
+MAT.earth.map = MAT.earth.bumpMap = MATTER.earth(); MAT.rock.map = MAT.rock.bumpMap = MATTER.rock(); // the ground under a course
+MAT.earth.needsUpdate = MAT.rock.needsUpdate = true;
+{
+  const merged = (list, key) => { const m = new THREE.Mesh(mergeGeometries(list.map(g => boxUV(g, 0.9))), PROP_MAT[key]); m.userData.kit = true; return m; };
+  const clumps = (spec, seed) => spec.map(([x, y, z, r, sy = 1], i) => lumpy(new THREE.IcosahedronGeometry(r, 3), r * 0.3, 2.2 / r, seed + i * 7).scale(1, sy, 1).translate(x, y, z));
+  const trunk = (r0, r1, h, bend = 0) => {
+    const g = new THREE.CylinderGeometry(r1, r0, h, 12, 6).translate(0, h / 2, 0), p = g.attributes.position;
+    for (let i = 0; i < p.count; i++) { const y = p.getY(i) / h; p.setX(i, p.getX(i) + Math.sin(y * 2.2) * bend); }
+    return g;
+  };
+  const model = (name, ...meshes) => { const o = new THREE.Group(); o.name = name; o.add(...meshes); KIT[name] = o; };
+  // a broadleaf tree, about 2.7 high: a trunk forking into a crown of clumps
+  model('tree_ball', merged([trunk(0.2, 0.1, 1.7, 0.06), trunk(0.08, 0.04, 0.7).rotateZ(0.7).translate(0.05, 1.1, 0), trunk(0.07, 0.04, 0.6).rotateZ(-0.6).translate(-0.05, 1.2, 0.05)], 'wood'),
+    merged(clumps([[0, 1.95, 0, 0.7], [0.5, 1.6, 0.15, 0.5], [-0.45, 1.65, -0.2, 0.52], [0.1, 2.35, -0.15, 0.48], [-0.15, 1.7, 0.45, 0.45], [0.3, 1.85, -0.45, 0.42]], 3), 'leaf'));
+  // a fir, about 2.9 high: drooping tiers of needles, ragged at the edges
+  model('tree_pine', merged([trunk(0.15, 0.06, 2.2)], 'wood'),
+    merged([[0.95, 0.5, 0.8], [0.8, 0.95, 0.75], [0.62, 1.4, 0.7], [0.45, 1.85, 0.65], [0.26, 2.25, 0.65]].map(([r, y, h], i) => lumpy(new THREE.ConeGeometry(r, h, 18, 3), r * 0.18, 4 / r, 40 + i * 3).translate(0, y + h / 2, 0)), 'leaf2'));
+  // a blossom tree, about 2.6 high: a crooked trunk, pink clumps, a few paler
+  model('tree_blossom', merged([trunk(0.16, 0.08, 1.6, 0.14), trunk(0.06, 0.03, 0.7).rotateZ(-0.8).translate(0.1, 1.2, 0)], 'wood'),
+    merged(clumps([[0, 1.85, 0, 0.62], [0.48, 2.05, 0.1, 0.44], [-0.45, 2.0, -0.15, 0.42], [0.1, 2.35, -0.3, 0.36], [-0.1, 1.7, 0.4, 0.38]], 9), 'pink'));
+  // a bush, about 0.6 high
+  model('bush', merged(clumps([[0, 0.3, 0, 0.36, 0.85], [0.36, 0.22, 0.1, 0.27, 0.85], [-0.33, 0.2, -0.08, 0.26, 0.85], [0.05, 0.2, -0.3, 0.24, 0.85]], 17), 'leaf'));
+  // boulders: uneven faces, a flat bottom sunk in the ground
+  for (const [name, size, seed] of [['rock_a', 0.45, 1], ['rock_b', 0.3, 2], ['rock_c', 0.7, 3]]) {
+    const g = lumpy(new THREE.IcosahedronGeometry(size, 2), size * 0.28, 1.6 / size, seed * 13).scale(1.25, 0.8, 1), p = g.attributes.position;
+    for (let i = 0; i < p.count; i++) p.setY(i, Math.max(p.getY(i), -size * 0.2) + size * 0.2);
+    g.computeVertexNormals();
+    model(name, merged([g], 'stone'));
+  }
+}
+// the islets' tops are turf, not leaves: a material of their own, recoloured with the leaves by a theme
+PALETTE.turf = 0x5fa046;
+PROP_MAT.turf = toon(PALETTE.turf, { map: tile('matter turf', (g, n, rand) => {
+  fill(g, n, '#d4d4d4');
+  for (let i = 0; i < 2600; i++) { const x = rand() * n, y = rand() * n, a = -Math.PI / 2 + (rand() - 0.5) * 0.8, l = 3 + rand() * 6; g.strokeStyle = ['#8a8a8a', '#a4a4a4', '#d0d0d0', '#eaeaea'][Math.floor(rand() * 4)]; g.lineWidth = 1.2; g.beginPath(); g.moveTo(x, y); g.lineTo(x + Math.cos(a) * l, y + Math.sin(a) * l); g.stroke(); }
+}, { grit: 0.1 }), normalMap: turf(), roughness: 0.92 });
+for (const name of ['islet_s', 'islet_m', 'islet_l']) KIT[name]?.traverse(m => { if (m.isMesh && m.material === PROP_MAT.leaf) m.material = PROP_MAT.turf; });
+// clouds: cumulus, heaped lumps with a flat underside, about 4 long
+{
+  const cloudMat = toon(PALETTE.cloud, { roughness: 1, emissive: 0xffffff, emissiveIntensity: 0.18 });
+  PROP_MAT.cloud.copy(cloudMat); // (the theme's recolouring of the clouds keeps working)
+  for (const [name, seed] of [['cloud_a', 1], ['cloud_b', 2], ['cloud_c', 3]]) {
+    let s = seed * 97;
+    const r = () => (s = (s * 16807) % 2147483647) / 2147483647, parts = [];
+    for (let i = 0; i < 7; i++) {
+      const rad = (0.5 + r() * 0.5) * (i === 0 ? 1.1 : 0.85);
+      parts.push(lumpy(new THREE.IcosahedronGeometry(rad, 2), rad * 0.22, 2 / rad, seed * 31 + i).scale(1, 0.8, 1).translate((r() - 0.5) * 2.8, r() * 0.35, (r() - 0.5) * 1.2));
+    }
+    const g = mergeGeometries(parts), p = g.attributes.position;
+    for (let i = 0; i < p.count; i++) p.setY(i, Math.max(p.getY(i), -0.05));
+    g.computeVertexNormals();
+    const o = new THREE.Group(), m = new THREE.Mesh(g, PROP_MAT.cloud);
+    m.userData.kit = true;
+    o.name = name; o.add(m); KIT[name] = o;
+  }
+}
+Object.assign(TOP, Object.fromEntries(Object.entries(KIT).map(([k, o]) => [k, new THREE.Box3().setFromObject(o).max.y])));
+
+// cloudPuffs draws the clouds of the sea of clouds, each a soft billow facing the camera, all in one draw:
+// a quad per cloud, turned to the camera in the vertex shader, its texture a heap of soft round puffs
+// lit from above. [x, y, z, size] each; color: the theme's; fog: the scene's, which they fade into.
+const PUFF = (() => {
+  const c = document.createElement('canvas'), n = c.width = 512; c.height = 256;
+  const g = c.getContext('2d');
+  let s = 5;
+  const r = () => (s = (s * 16807) % 2147483647) / 2147483647;
+  for (let i = 0; i < 70; i++) {
+    const t = r(), x = 70 + r() * (n - 140), y = 150 - Math.sin(t * Math.PI) * 60 * r() - 10 + (x > 140 && x < n - 140 ? -20 : 10), rad = 28 + r() * 48;
+    const grad = g.createRadialGradient(x, y - rad * 0.3, rad * 0.1, x, y, rad);
+    grad.addColorStop(0, 'rgba(255,255,255,0.95)'); grad.addColorStop(0.55, 'rgba(244,246,250,0.75)'); grad.addColorStop(1, 'rgba(215,222,234,0)');
+    g.fillStyle = grad; g.beginPath(); g.arc(x, y, rad, 0, TAU); g.fill();
+  }
+  const t = new THREE.CanvasTexture(c);
+  t.colorSpace = THREE.SRGBColorSpace;
+  return t;
+})();
+function cloudPuffs(list, color, fog) {
+  const material = new THREE.ShaderMaterial({
+    transparent: true, depthWrite: false, fog: !!fog,
+    uniforms: THREE.UniformsUtils.merge([THREE.UniformsLib.fog, { map: { value: PUFF }, tint: { value: new THREE.Color(color) } }]),
+    vertexShader: `#include <common>
+#include <fog_pars_vertex>
+varying vec2 vUv; varying float vShade, vNear;
+void main() {
+  vec4 mvPosition = modelViewMatrix * instanceMatrix * vec4(0.0, 0.0, 0.0, 1.0);
+  vNear = smoothstep(8.0, 22.0, -mvPosition.z); // close to the camera, a cloud fades away: it never veils the course
+  float s = length(instanceMatrix[0].xyz);
+  float flip = mod(float(gl_InstanceID), 2.0) * 2.0 - 1.0;
+  mvPosition.xy += position.xy * s * vec2(5.2, 2.6);
+  vUv = vec2(flip > 0.0 ? uv.x : 1.0 - uv.x, uv.y); vShade = 0.9 + 0.1 * uv.y;
+  gl_Position = projectionMatrix * mvPosition;
+  #include <fog_vertex>
+}`,
+    fragmentShader: `#include <common>
+#include <fog_pars_fragment>
+uniform sampler2D map; uniform vec3 tint; varying vec2 vUv; varying float vShade, vNear;
+void main() {
+  vec4 t = texture2D(map, vUv);
+  if (t.a * vNear < 0.01) discard;
+  gl_FragColor = vec4(t.rgb * tint * vShade, t.a * vNear);
+  #include <tonemapping_fragment>
+  #include <colorspace_fragment>
+  #include <fog_fragment>
+}`,
+  });
+  const quad = new THREE.PlaneGeometry(1, 1), mesh = new THREE.InstancedMesh(quad, material, list.length), m = new THREE.Matrix4();
+  list.forEach(([x, y, z, s], i) => mesh.setMatrixAt(i, m.makeScale(s, s, s).setPosition(x, y, z)));
+  mesh.frustumCulled = false;
+  mesh.renderOrder = -1;
+  return mesh;
 }
 
 // cupFloor is the floor the cup is cut into: its outline with a round hole, given its thickness.

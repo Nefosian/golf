@@ -23,6 +23,8 @@ function frame(a, b) {
 // hole starts a hole: opts are the hole rules (par, maxStrokes, gravity).
 export function hole(name, opts = {}) {
   const h = { name, ...opts, colliders: [], zones: [] };
+  // a zone laid after stage(t, i) belongs to hole i of a world (it is not written in the JSON otherwise)
+  Object.defineProperty(h.zones, 'push', { value(...zs) { for (const z of zs) if (h.stageNow) z.stage = h.stageNow; return Array.prototype.push.apply(this, zs); } });
   const mat = m => (m ? { material: m } : {});
   const t = {
     h,
@@ -84,6 +86,26 @@ export function hole(name, opts = {}) {
     cup(x, y, z) { h.cup = { x, y, z, r: 0.45 }; return t; },
   };
   return Object.assign(t, pieces(t));
+}
+
+// stage tags the zones laid from now on as those of hole i of a world (from 1): only that hole's
+// verification asks that a ball can get into them
+function tagStage(t, i) { t.h.stageNow = i; return t; }
+export { tagStage as stage };
+
+// stages makes the holes of a world from the ground t built for all of them: each gets the whole
+// ground, its name, tee, cup and rules, and the flags of the other cups. stage: { name, tee: [x, y, z]
+// (the floor under it), cup: [x, y, z], par, maxStrokes }. build.mjs writes them as file-1, file-2...
+export function stages(t, world, list) {
+  return list.map((s, i) => {
+    const h = JSON.parse(JSON.stringify(t.h));
+    delete h.stageNow;
+    Object.assign(h, { name: s.name, world, stage: i + 1, par: s.par ?? 3, ...(s.maxStrokes ? { maxStrokes: s.maxStrokes } : {}) });
+    h.tee = V(s.tee[0], s.tee[1] + 0.18, s.tee[2]);
+    h.cup = { x: s.cup[0], y: s.cup[1], z: s.cup[2], r: 0.45 };
+    h.flags = list.filter((_, j) => j !== i).map(o => V(...o.cup));
+    return { h };
+  });
 }
 
 // emit gives the JSON of a hole, a collider or a zone a line, like the hand-written maps.

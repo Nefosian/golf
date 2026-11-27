@@ -290,6 +290,7 @@ function showRoom() {
   $('room-public').lastChild.textContent = t(s.public ? 'public' : 'private');
   const val = (key, text) => { $('lobby').querySelector(`[data-val=${key}]`).textContent = text; };
   val('collisions', t(s.collisions ? 'yes' : 'no'));
+  val('powers', t(s.powers ? 'yes' : 'no'));
   val('strokes', s.strokes || t('strokes.hole'));
   val('countdown', `${s.countdown} s`);
   val('limit', `${s.limit} min`);

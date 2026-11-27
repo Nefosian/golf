@@ -48,6 +48,9 @@ input::placeholder { color: #a3b1ab; }
 
 /* ---- during a game: the HUD --------------------------------------------------------------- */
 canvas { position: fixed; inset: 0; width: 100%; height: 100%; touch-action: none; }
+/* a soft vignette over the game, under the HUD: the eye goes to the middle (drawn by the page, not the graphics card) */
+#vignette { position: fixed; inset: 0; pointer-events: none; background: radial-gradient(ellipse 75% 70% at 50% 48%, #0000 60%, #17332b30 100%); }
+body:not([data-screen=game]) #vignette { display: none; }
 .hud { position: fixed; background: var(--paper); border: var(--line); border-radius: 16px; box-shadow: 0 4px 0 var(--ink); }
 body:not([data-screen=game]) :is(canvas, .hud, .hud-row, #overlay), body[data-screen=game] #front { display: none; }
 button.hud { color: var(--ink); cursor: pointer; }
@@ -70,10 +73,27 @@ button.hud:hover { background: #fff; }
 /* what is only read lets the aim through */
 .hud-row { position: fixed; bottom: 22px; left: 50%; transform: translateX(-50%); display: flex; gap: 10px; pointer-events: none; }
 .hud-row .hud { position: static; display: flex; align-items: center; gap: 8px; height: 54px; padding: 6px 14px; }
-.lbl { font-size: 13px; color: var(--muted); font-weight: 900; letter-spacing: .04em; text-transform: uppercase; }
+.lbl { white-space: nowrap; font-size: 13px; color: var(--muted); font-weight: 900; letter-spacing: .04em; text-transform: uppercase; }
 .big { font-size: 26px; font-weight: 900; line-height: 1; font-variant-numeric: tabular-nums; }
 .big small { font-size: 16px; color: var(--muted); }
 #timer { background: var(--sun); } #timer .lbl { color: var(--ink); }
+/* the powers in hand: a click plays one (pointer events: the row lets them through to the course) */
+#powers { pointer-events: auto; gap: 6px; padding: 6px 8px 6px 12px; }
+#powers .pow { --c: #fff; display: flex; align-items: center; gap: 6px; height: 40px; white-space: nowrap; padding: 0 10px 0 6px; border: 2.5px solid var(--ink); border-radius: 12px; background: #fff; color: var(--ink); font: 800 14px/1 var(--text, inherit); cursor: pointer; box-shadow: 0 3px 0 var(--ink); }
+#powers .pow:hover { transform: translateY(-1px); }
+#powers .pow:active { transform: translateY(2px); box-shadow: 0 1px 0 var(--ink); }
+#powers .pow:focus-visible { outline: 3px solid var(--sun); outline-offset: 2px; }
+#powers .pow svg, #powers .armed svg { width: 26px; height: 26px; padding: 3px; border-radius: 50%; background: var(--c); fill: none; stroke: var(--ink); stroke-width: 2.2; stroke-linecap: round; stroke-linejoin: round; }
+#powers .pow.empty { width: 40px; padding: 0; justify-content: center; border-style: dashed; background: transparent; box-shadow: none; cursor: default; opacity: .5; }
+#powers kbd { font: 800 11px/1 var(--text, inherit); color: var(--muted); border: 1.5px solid var(--muted); border-radius: 5px; padding: 2px 4px; }
+#powers .armed { --c: #fff; display: grid; place-items: center; width: 40px; height: 40px; border-radius: 50%; border: 2.5px solid var(--ink); background: #e9ddff; animation: armed 1.2s ease-in-out infinite; }
+#powers .armed.weight { background: #dfe4ea; animation: none; }
+@keyframes armed { 50% { transform: scale(1.08); } }
+@media (prefers-reduced-motion: reduce) { #powers .armed { animation: none; } }
+/* a fog the others threw: the course veiled until our next shot */
+#fog { position: fixed; inset: 0; pointer-events: none; background: radial-gradient(ellipse 55% 45% at 50% 52%, #eef2f700 0%, #eef2f7c8 55%, #eef2f7f2 100%); backdrop-filter: blur(3px); animation: fog 6s ease-in-out infinite alternate; }
+@keyframes fog { to { background-position: 40px 0; opacity: .93; } }
+body:not([data-screen=game]) #fog { display: none; }
 #splash { left: 50%; top: 16px; transform: translateX(-50%); display: flex; align-items: center; gap: 14px; max-width: calc(100% - 620px); height: 54px; padding: 0 18px;
   pointer-events: none; white-space: nowrap; transition: opacity .5s; }
 #splash.gone { opacity: 0; }
