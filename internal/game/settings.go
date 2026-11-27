@@ -82,7 +82,9 @@ func (s *settings) clean(holes int) {
 
 // course is the holes of a game, in order: drawn at random from the pool, or the list. Empty when
 // there is nothing to play. The holes of a world (world gives each hole's, "" for none) are drawn
-// together, in their order: a world in the pool counts as many holes as it has there.
+// together, in their order: a world in the pool counts as many holes as it has there. A random
+// course has exactly s.Holes holes: a world that would go past that is left out, and if nothing but
+// such worlds is left to fill the course, the first holes of one of them close it, in their order.
 func (s *settings) course(world func(int) string) []int {
 	if s.Mode == "custom" {
 		return slices.Clone(s.List)
@@ -104,14 +106,20 @@ func (s *settings) course(world func(int) string) []int {
 	}
 	rand.Shuffle(len(units), func(i, j int) { units[i], units[j] = units[j], units[i] })
 	var course []int
+	var left [][]int // the worlds that did not fit, in the order drawn
 	for _, u := range units {
-		if len(course) > 0 && len(course)+len(u) > s.Holes {
-			continue // a world that would go past the count: another time
-		}
-		course = append(course, u...)
-		if len(course) >= s.Holes {
+		if len(course) == s.Holes {
 			break
 		}
+		if len(course)+len(u) > s.Holes {
+			left = append(left, u) // a world that would go past the count: another time
+			continue
+		}
+		course = append(course, u...)
+	}
+	// only worlds too big for what is left: the first holes of one of them, in their order
+	if n := s.Holes - len(course); n > 0 && len(left) > 0 {
+		course = append(course, left[0][:n]...)
 	}
 	return course
 }
